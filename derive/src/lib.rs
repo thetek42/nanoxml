@@ -1,11 +1,12 @@
+#![allow(unused_imports)]
+
 use proc_macro::TokenStream;
+use quote::quote;
+use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Fields, Lit, parse_macro_input};
 
 #[cfg(feature = "ser")]
 #[proc_macro_derive(SerXml, attributes(attr, rename, text))]
 pub fn derive_serxml(input: TokenStream) -> TokenStream {
-    use quote::quote;
-    use syn::{Data, DataStruct, DeriveInput, Expr, Fields, Lit, parse_macro_input};
-
     let input = parse_macro_input!(input as DeriveInput);
     let name = input.ident;
     let fields = match input.data {
@@ -15,6 +16,7 @@ pub fn derive_serxml(input: TokenStream) -> TokenStream {
         }) => &fields.named,
         _ => panic!("SerXml can only be derived for structs with named fields"),
     };
+    let rename = get_rename_attr(&input.attrs).unwrap_or(name.to_string());
 
     let mut regular_fields = Vec::new();
     let mut attr_fields = Vec::new();
@@ -23,21 +25,7 @@ pub fn derive_serxml(input: TokenStream) -> TokenStream {
         let field_name = field.ident.as_ref().unwrap();
         let is_attr = field.attrs.iter().any(|attr| attr.path().is_ident("attr"));
         let is_text = field.attrs.iter().any(|attr| attr.path().is_ident("text"));
-        let rename = field
-            .attrs
-            .iter()
-            .filter(|attr| attr.path().is_ident("rename"))
-            .next()
-            .and_then(|attr| attr.meta.require_name_value().ok())
-            .and_then(|attr| match &attr.value {
-                Expr::Lit(lit) => Some(lit),
-                _ => None,
-            })
-            .and_then(|lit| match &lit.lit {
-                Lit::Str(lit) => Some(lit),
-                _ => None,
-            })
-            .map(|lit| lit.value());
+        let rename = get_rename_attr(&field.attrs);
         let is_rename = rename.is_some();
         let rename = rename.unwrap_or(field_name.to_string());
         match (is_attr, is_text) {
@@ -90,7 +78,7 @@ pub fn derive_serxml(input: TokenStream) -> TokenStream {
 
     let top_level_impl = quote! {
         impl ::nanoxml::derive::SerXmlTopLevel for #name {
-            const TAG_NAME: &'static str = stringify!(#name);
+            const TAG_NAME: &'static str = #rename;
         }
     };
 
@@ -101,4 +89,21 @@ pub fn derive_serxml(input: TokenStream) -> TokenStream {
     };
 
     full_impl.into()
+}
+
+fn get_rename_attr(attrs: &[Attribute]) -> Option<String> {
+    attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("rename"))
+        .next()
+        .and_then(|attr| attr.meta.require_name_value().ok())
+        .and_then(|attr| match &attr.value {
+            Expr::Lit(lit) => Some(lit),
+            _ => None,
+        })
+        .and_then(|lit| match &lit.lit {
+            Lit::Str(lit) => Some(lit),
+            _ => None,
+        })
+        .map(|lit| lit.value())
 }

@@ -1,6 +1,7 @@
 use nanoxml::derive::{SerXml, SerXmlTopLevel};
 
 #[derive(Debug, SerXml)]
+#[rename = "user"]
 struct User {
     id: Id,
     #[attr]
@@ -16,6 +17,7 @@ struct User {
     baz: Option<String>,
     #[attr]
     qux: Option<String>,
+    multi: Vec<i32>,
 }
 
 #[derive(Debug, SerXml)]
@@ -35,10 +37,11 @@ fn derive() {
         bar: Some(String::from("123")),
         baz: None,
         qux: Some(String::from("456")),
+        multi: vec![-1, 0, 1],
     };
 
     assert_eq!(
         user.serialize_to_string(),
-        "<User name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar></User>"
+        "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi></user>"
     );
 }

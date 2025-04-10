@@ -3,6 +3,7 @@ pub use ser::*;
 
 #[cfg(feature = "ser")]
 mod ser {
+    use core::fmt::Error as FmtError;
     use core::fmt::Result as FmtResult;
     use core::fmt::Write;
 
@@ -14,7 +15,7 @@ mod ser {
     extern crate alloc;
 
     #[cfg(feature = "alloc")]
-    use alloc::string::String;
+    use alloc::{string::String, vec::Vec};
 
     pub trait SerXml {
         fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult;
@@ -59,13 +60,12 @@ mod ser {
         }
     }
 
-    macro_rules! impl_ser {
+    macro_rules! impl_ser_primitive {
         ($ty:ty) => {
             impl SerXml for $ty {
                 fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
                     write!(xml.writer, "{}", self)
                 }
-
                 fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
                     _ = xml;
                     Ok(())
@@ -76,21 +76,21 @@ mod ser {
         };
     }
 
-    impl_ser!(i8);
-    impl_ser!(i16);
-    impl_ser!(i32);
-    impl_ser!(i64);
-    impl_ser!(u8);
-    impl_ser!(u16);
-    impl_ser!(u32);
-    impl_ser!(u64);
-    impl_ser!(f32);
-    impl_ser!(f64);
-    impl_ser!(bool);
-    impl_ser!(str);
+    impl_ser_primitive!(i8);
+    impl_ser_primitive!(i16);
+    impl_ser_primitive!(i32);
+    impl_ser_primitive!(i64);
+    impl_ser_primitive!(u8);
+    impl_ser_primitive!(u16);
+    impl_ser_primitive!(u32);
+    impl_ser_primitive!(u64);
+    impl_ser_primitive!(f32);
+    impl_ser_primitive!(f64);
+    impl_ser_primitive!(bool);
+    impl_ser_primitive!(str);
 
     #[cfg(feature = "alloc")]
-    impl_ser!(String);
+    impl_ser_primitive!(String);
 
     impl<T: SerXml> SerXml for Option<T> {
         fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
@@ -135,6 +135,57 @@ mod ser {
             }
         }
     }
+
+    macro_rules! impl_ser_iter {
+        ($ty:ty) => {
+            impl<T: SerXml> SerXml for $ty {
+                fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+                    _ = xml;
+                    Err(FmtError)
+                }
+                fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+                    _ = xml;
+                    Err(FmtError)
+                }
+                fn ser<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, tag_name: &str) -> FmtResult {
+                    for item in self.iter() {
+                        item.ser(xml, tag_name)?;
+                    }
+                    Ok(())
+                }
+            }
+        };
+    }
+
+    macro_rules! impl_ser_iter_n {
+        ($ty:ty) => {
+            impl<T: SerXml, const N: usize> SerXml for $ty {
+                fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+                    _ = xml;
+                    Err(FmtError)
+                }
+                fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+                    _ = xml;
+                    Err(FmtError)
+                }
+                fn ser<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, tag_name: &str) -> FmtResult {
+                    for item in self.iter() {
+                        item.ser(xml, tag_name)?;
+                    }
+                    Ok(())
+                }
+            }
+        };
+    }
+
+    impl_ser_iter!([T]);
+    impl_ser_iter_n!([T; N]);
+
+    #[cfg(feature = "alloc")]
+    impl_ser_iter!(Vec<T>);
+
+    #[cfg(feature = "heapless")]
+    impl_ser_iter_n!(heapless::Vec<T, N>);
 
     #[cfg(feature = "heapless")]
     impl<const N: usize> SerXml for heapless::String<N> {
