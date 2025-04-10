@@ -10,6 +10,7 @@ pub struct XmlParser<'a> {
     pub(crate) s: &'a str,
     pub(crate) n: usize,
     pub(crate) in_tag: bool,
+    pub(crate) selfclose: bool,
 }
 
 impl<'a> XmlParser<'a> {
@@ -19,10 +20,16 @@ impl<'a> XmlParser<'a> {
             s,
             n: 0,
             in_tag: false,
+            selfclose: false,
         })
     }
 
     pub fn next_token(&mut self) -> Result<Option<XmlToken<'a>>, XmlError> {
+        if self.selfclose {
+            self.selfclose = false;
+            return Ok(Some(XmlToken::TagClose("")));
+        }
+
         self.consume_whitespace();
         match self.consume_ascii() {
             Some(b'<') => {
@@ -45,7 +52,8 @@ impl<'a> XmlParser<'a> {
             }
             Some(b'/') if self.in_tag => {
                 self.expect_ascii(b'>')?;
-                Ok(Some(XmlToken::TagClose("")))
+                self.selfclose = true;
+                Ok(Some(XmlToken::TagOpenEnd))
             }
             Some(_) if self.in_tag => {
                 self.n -= 1;
@@ -82,6 +90,7 @@ impl<'a> XmlParser<'a> {
     pub fn tag_close(&mut self, expect: &str) -> Result<(), XmlError> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagClose(tag) if tag == expect => Ok(()),
+            XmlToken::TagClose(tag) if tag.is_empty() => Ok(()),
             XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
         }
@@ -98,6 +107,13 @@ impl<'a> XmlParser<'a> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::Attribute(key, value) => Ok((key, value)),
             _ => Err(XmlError::UnexpectedToken),
+        }
+    }
+
+    pub fn check_end(&mut self) -> Result<(), XmlError> {
+        match self.next_token()? {
+            Some(_) => Err(XmlError::TrailingChars),
+            None => Ok(()),
         }
     }
 
@@ -193,7 +209,7 @@ impl<'a> XmlStr<'a> {
     }
 
     #[cfg(feature = "alloc")]
-    pub fn parse(&self) -> Cow<'a, str> {
+    pub fn parsed(&self) -> Cow<'a, str> {
         let mut i = 0;
         while i < self.s.len() {
             let s = &self.s[i..];
@@ -225,6 +241,30 @@ impl<'a> XmlStr<'a> {
         Cow::Borrowed(self.s)
     }
 
+    #[cfg(feature = "heapless")]
+    pub fn heapless<const N: usize>(&self) -> Result<heapless::String<N>, ()> {
+        if self.s.len() > N {
+            return Err(());
+        }
+        let mut ret = heapless::String::new();
+        let mut i = 0;
+        let mut rest = self.s;
+        while i < rest.len() {
+            let s = &rest[i..];
+            let c = s.chars().next().unwrap();
+            if c == '&' {
+                let (c, new_rest) = starts_with_xml_escape_code(s).unwrap_or(('&', &s[1..]));
+                ret.push(c)?;
+                rest = new_rest;
+                i = 0;
+            } else {
+                ret.push(c)?;
+                i += c.len_utf8();
+            }
+        }
+        Ok(ret)
+    }
+
     fn new(s: &'a str) -> Self {
         Self { s }
     }
@@ -237,6 +277,11 @@ pub enum XmlError {
     NameMismatch,
     UnexpectedToken,
     UnexpectedEof,
+    TrailingChars,
+    InvalidField,
+    InvalidVariant,
+    InvalidValue,
+    DuplicateField,
 }
 
 fn skip_xml_header(s: &str) -> Result<&str, XmlError> {

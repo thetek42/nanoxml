@@ -36,7 +36,9 @@ fn derive_serxml_struct(
 
     let ser_body = match xml_fields.text {
         Some(text_field) => {
-            vec![quote! { ::nanoxml::derive::SerXmlNoAttrs::ser_as_body(&self.#text_field, xml)?; }]
+            vec![
+                quote! { ::nanoxml::derive::ser::SerXmlNoAttrs::ser_as_body(&self.#text_field, xml)?; },
+            ]
         }
         None => xml_fields
             .regular
@@ -46,7 +48,7 @@ fn derive_serxml_struct(
                     field_name,
                     renamed,
                 } = field;
-                quote! { ::nanoxml::derive::SerXml::ser(&self.#field_name, xml, #renamed)?; }
+                quote! { ::nanoxml::derive::ser::SerXml::ser_xml(&self.#field_name, xml, #renamed)?; }
             })
             .collect(),
     };
@@ -58,12 +60,12 @@ fn derive_serxml_struct(
                 field_name,
                 renamed,
             } = field;
-            quote! { ::nanoxml::derive::SerXmlAsAttr::ser_as_attr(&self.#field_name, xml, #renamed)?; }
+            quote! { ::nanoxml::derive::ser::SerXmlAsAttr::ser_as_attr(&self.#field_name, xml, #renamed)?; }
         })
         .collect();
 
     let serxml_impl = quote! {
-        impl ::nanoxml::derive::SerXml for #name {
+        impl ::nanoxml::derive::ser::SerXml for #name {
             fn ser_body<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 #(#ser_body)*
                 Ok(())
@@ -77,12 +79,12 @@ fn derive_serxml_struct(
     };
 
     let no_attr_impl = match xml_fields.attrs.len() {
-        0 => quote! { impl ::nanoxml::derive::SerXmlNoAttrs for #name {} },
+        0 => quote! { impl ::nanoxml::derive::ser::SerXmlNoAttrs for #name {} },
         _ => quote! {},
     };
 
     let top_level_impl = quote! {
-        impl ::nanoxml::derive::SerXmlTopLevel for #name {
+        impl ::nanoxml::derive::ser::SerXmlTopLevel for #name {
             const TAG_NAME: &'static str = #rename;
         }
     };
@@ -116,7 +118,7 @@ fn derive_serxml_enum(
         .collect();
 
     let serxml_impl = quote! {
-        impl ::nanoxml::derive::SerXml for #name {
+        impl ::nanoxml::derive::ser::SerXml for #name {
             fn ser_body<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 match self {
                     #(#cases)*
@@ -129,12 +131,12 @@ fn derive_serxml_enum(
         }
     };
 
-    let no_attr_impl = quote! { impl ::nanoxml::derive::SerXmlNoAttrs for #name {} };
+    let no_attr_impl = quote! { impl ::nanoxml::derive::ser::SerXmlNoAttrs for #name {} };
 
-    let as_attr_impl = quote! { impl ::nanoxml::derive::SerXmlAsAttr for #name {} };
+    let as_attr_impl = quote! { impl ::nanoxml::derive::ser::SerXmlAsAttr for #name {} };
 
     let top_level_impl = quote! {
-        impl ::nanoxml::derive::SerXmlTopLevel for #name {
+        impl ::nanoxml::derive::ser::SerXmlTopLevel for #name {
             const TAG_NAME: &'static str = #rename;
         }
     };

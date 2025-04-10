@@ -1,6 +1,6 @@
 use std::net::Ipv4Addr;
 
-use nanoxml::derive::{SerXml, SerXmlTopLevel};
+use nanoxml::derive::ser::{SerXml, SerXmlTopLevel};
 
 #[derive(Debug, SerXml)]
 #[rename = "user"]
