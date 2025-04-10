@@ -1,5 +1,6 @@
 use std::net::Ipv4Addr;
 
+use nanoxml::derive::de::{DeXml, DeXmlTopLevel};
 use nanoxml::derive::ser::{SerXml, SerXmlTopLevel};
 
 #[derive(Debug, SerXml)]
@@ -61,4 +62,18 @@ fn derive() {
         user.serialize_to_string(),
         "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role></user>"
     );
+}
+
+#[derive(Debug, DeXml)]
+#[rename = "foo"]
+struct Foo {
+    bar: String,
+    baz: u64,
+}
+
+#[test]
+fn derive2() {
+    let s = "<foo><bar>qux</bar><baz>42</baz></foo>";
+    let foo = Foo::deserialize_str(s).unwrap();
+    assert!(matches!(foo, Foo { bar, baz: 42 } if bar == "qux"));
 }

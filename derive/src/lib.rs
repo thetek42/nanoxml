@@ -151,6 +151,116 @@ fn derive_serxml_enum(
     full_impl.into()
 }
 
+#[cfg(feature = "de")]
+#[proc_macro_derive(DeXml, attributes(attr, rename, text))]
+pub fn derive_dexml(input: TokenStream) -> TokenStream {
+    use syn::DataEnum;
+
+    let input = parse_macro_input!(input as DeriveInput);
+    let rename = get_rename_attr(&input.attrs).unwrap_or(input.ident.to_string());
+    match input.data {
+        Data::Struct(DataStruct {
+            fields: Fields::Named(ref fields),
+            ..
+        }) => derive_dexml_struct(&input.ident, &rename, &fields.named),
+        //Data::Enum(DataEnum { variants, .. }) => {
+        //    derive_serxml_enum(&input.ident, &rename, &variants)
+        //}
+        _ => panic!("SerXml can only be derived for structs with named fields or enums"),
+    }
+}
+
+#[cfg(feature = "de")]
+fn derive_dexml_struct(
+    name: &Ident,
+    rename: &str,
+    fields: &Punctuated<Field, Comma>,
+) -> TokenStream {
+    let xml_fields = get_xml_fields(fields);
+
+    let field_init: Vec<_> = xml_fields
+        .all
+        .iter()
+        .map(|field| quote! { let mut #field = None; })
+        .collect();
+
+    let attr_parse: Vec<_> = xml_fields
+        .attrs
+        .iter()
+        .map(|field| {
+            let RenamedField {
+                field_name,
+                renamed,
+            } = field;
+            quote! {
+                #renamed => #field_name = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(attr_value)?),
+            }
+        })
+        .collect();
+
+    let regular_parse: Vec<_> = xml_fields
+        .regular
+        .iter()
+        .map(|field| {
+            let RenamedField {
+                field_name,
+                renamed,
+            } = field;
+            quote! {
+                #renamed => #field_name = Some(::nanoxml::derive::de::DeXml::de_xml(parser)?),
+            }
+        })
+        .collect();
+
+    let field_unwraps: Vec<_> = xml_fields
+        .all
+        .iter()
+        .map(|field| quote! { let #field = #field.ok_or(::nanoxml::de::XmlError::MissingField)?; })
+        .collect();
+
+    let field_returns: Vec<_> = xml_fields
+        .all
+        .iter()
+        .map(|field| quote! { #field, })
+        .collect();
+
+    let dexml_impl = quote! {
+        impl<'a> ::nanoxml::derive::de::DeXml<'a> for #name {
+            fn de_xml(parser: &mut ::nanoxml::de::XmlParser<'a>) -> Result<Self, ::nanoxml::de::XmlError> {
+                #(#field_init)*
+                while let Ok((attr_key, attr_value)) = parser.attr_or_tag_open_end()? {
+                    match attr_key {
+                        #(#attr_parse)*
+                        _ => return Err(::nanoxml::de::XmlError::InvalidField),
+                    }
+                }
+                // TODO: text
+                while let Ok((tag)) = parser.tag_open_or_close(#rename)? {
+                    match tag {
+                        #(#regular_parse)*
+                        _ => return Err(::nanoxml::de::XmlError::InvalidField),
+                    }
+                }
+                #(#field_unwraps)*
+                Ok(Self { #(#field_returns)* })
+            }
+        }
+    };
+
+    let top_level_impl = quote! {
+        impl ::nanoxml::derive::de::DeXmlTopLevel<'_> for #name {
+            const TAG_NAME: &'static str = #rename;
+        }
+    };
+
+    let full_impl = quote! {
+        #dexml_impl
+        #top_level_impl
+    };
+
+    full_impl.into()
+}
+
 fn get_rename_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
@@ -171,6 +281,7 @@ struct XmlFields<'a> {
     regular: Vec<RenamedField<'a>>,
     attrs: Vec<RenamedField<'a>>,
     text: Option<&'a Ident>,
+    all: Vec<&'a Ident>,
 }
 
 struct RenamedField<'a> {
@@ -182,8 +293,10 @@ fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
     let mut regular = Vec::new();
     let mut attrs = Vec::new();
     let mut text = None;
+    let mut all = Vec::new();
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
+        all.push(field_name);
         let is_attr = field.attrs.iter().any(|attr| attr.path().is_ident("attr"));
         let is_text = field.attrs.iter().any(|attr| attr.path().is_ident("text"));
         let rename = get_rename_attr(&field.attrs);
@@ -214,6 +327,7 @@ fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
         regular,
         attrs,
         text,
+        all,
     }
 }
 

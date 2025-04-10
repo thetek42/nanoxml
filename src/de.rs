@@ -91,6 +91,7 @@ impl<'a> XmlParser<'a> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagClose(tag) if tag == expect => Ok(()),
             XmlToken::TagClose(tag) if tag.is_empty() => Ok(()),
+            XmlToken::TagClose(_) if expect.is_empty() => Ok(()),
             XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
         }
@@ -106,6 +107,28 @@ impl<'a> XmlParser<'a> {
     pub fn attr(&mut self) -> Result<(&'a str, XmlStr<'a>), XmlError> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::Attribute(key, value) => Ok((key, value)),
+            _ => Err(XmlError::UnexpectedToken),
+        }
+    }
+
+    pub fn attr_or_tag_open_end(&mut self) -> Result<Result<(&'a str, XmlStr<'a>), ()>, XmlError> {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
+            XmlToken::Attribute(key, value) => Ok(Ok((key, value))),
+            XmlToken::TagOpenEnd => Ok(Err(())),
+            _ => Err(XmlError::UnexpectedToken),
+        }
+    }
+
+    pub fn tag_open_or_close(
+        &mut self,
+        expect_close: &str,
+    ) -> Result<Result<&'a str, ()>, XmlError> {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
+            XmlToken::TagOpenStart(tag) => Ok(Ok(tag)),
+            XmlToken::TagClose(tag) if tag == expect_close => Ok(Err(())),
+            XmlToken::TagClose(tag) if tag.is_empty() => Ok(Err(())),
+            XmlToken::TagClose(_) if expect_close.is_empty() => Ok(Err(())),
+            XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
@@ -282,6 +305,7 @@ pub enum XmlError {
     InvalidVariant,
     InvalidValue,
     DuplicateField,
+    MissingField,
 }
 
 fn skip_xml_header(s: &str) -> Result<&str, XmlError> {
