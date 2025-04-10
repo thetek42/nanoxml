@@ -152,8 +152,7 @@ fn derive_serxml_enum(
 fn get_rename_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .filter(|attr| attr.path().is_ident("rename"))
-        .next()
+        .find(|attr| attr.path().is_ident("rename"))
         .and_then(|attr| attr.meta.require_name_value().ok())
         .and_then(|attr| match &attr.value {
             Expr::Lit(lit) => Some(lit),

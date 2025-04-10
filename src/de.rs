@@ -22,7 +22,7 @@ impl<'a> XmlParser<'a> {
         })
     }
 
-    pub fn next(&mut self) -> Result<Option<XmlToken<'a>>, XmlError> {
+    pub fn next_token(&mut self) -> Result<Option<XmlToken<'a>>, XmlError> {
         self.consume_whitespace();
         match self.consume_ascii() {
             Some(b'<') => {
@@ -65,7 +65,7 @@ impl<'a> XmlParser<'a> {
     }
 
     pub fn tag_open_start(&mut self, expect: &str) -> Result<(), XmlError> {
-        match self.next()?.ok_or(XmlError::UnexpectedEof)? {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagOpenStart(tag) if tag == expect => Ok(()),
             XmlToken::TagOpenStart(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
@@ -73,14 +73,14 @@ impl<'a> XmlParser<'a> {
     }
 
     pub fn tag_open_end(&mut self) -> Result<(), XmlError> {
-        match self.next()?.ok_or(XmlError::UnexpectedEof)? {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagOpenEnd => Ok(()),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
 
     pub fn tag_close(&mut self, expect: &str) -> Result<(), XmlError> {
-        match self.next()?.ok_or(XmlError::UnexpectedEof)? {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagClose(tag) if tag == expect => Ok(()),
             XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
@@ -88,27 +88,27 @@ impl<'a> XmlParser<'a> {
     }
 
     pub fn text(&mut self) -> Result<XmlStr<'a>, XmlError> {
-        match self.next()?.ok_or(XmlError::UnexpectedEof)? {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::Text(s) => Ok(s),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
 
     pub fn attr(&mut self) -> Result<(&'a str, XmlStr<'a>), XmlError> {
-        match self.next()?.ok_or(XmlError::UnexpectedEof)? {
+        match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::Attribute(key, value) => Ok((key, value)),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
 
     fn consume_ascii(&mut self) -> Option<u8> {
-        let c = *self.s[self.n..].as_bytes().get(0)?;
+        let c = *self.s.as_bytes()[self.n..].first()?;
         self.n += 1;
         Some(c)
     }
 
     fn opt_consume_ascii(&mut self, expect: u8) -> Option<()> {
-        let c = *self.s[self.n..].as_bytes().get(0)?;
+        let c = *self.s.as_bytes()[self.n..].first()?;
         if c == expect {
             self.n += 1;
             Some(())
@@ -118,9 +118,8 @@ impl<'a> XmlParser<'a> {
     }
 
     fn expect_ascii(&mut self, expect: u8) -> Result<(), XmlError> {
-        let c = *self.s[self.n..]
-            .as_bytes()
-            .get(0)
+        let c = *self.s.as_bytes()[self.n..]
+            .first()
             .ok_or(XmlError::UnexpectedEof)?;
         if c == expect {
             self.n += 1;
