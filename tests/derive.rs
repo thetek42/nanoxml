@@ -1,3 +1,5 @@
+use std::net::Ipv4Addr;
+
 use nanoxml::derive::{SerXml, SerXmlTopLevel};
 
 #[derive(Debug, SerXml)]
@@ -18,6 +20,19 @@ struct User {
     #[attr]
     qux: Option<String>,
     multi: Vec<i32>,
+    ip: Ipv4Addr,
+    role: Role,
+}
+
+#[derive(Debug, SerXml)]
+#[allow(unused)]
+enum Role {
+    #[rename = "user"]
+    User,
+    #[rename = "mod"]
+    Moderator,
+    #[rename = "admin"]
+    Admin,
 }
 
 #[derive(Debug, SerXml)]
@@ -38,10 +53,12 @@ fn derive() {
         baz: None,
         qux: Some(String::from("456")),
         multi: vec![-1, 0, 1],
+        ip: Ipv4Addr::new(192, 168, 0, 1),
+        role: Role::Admin,
     };
 
     assert_eq!(
         user.serialize_to_string(),
-        "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi></user>"
+        "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role></user>"
     );
 }

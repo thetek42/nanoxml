@@ -2,59 +2,64 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Fields, Lit, parse_macro_input};
+use syn::parse_macro_input;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
+use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Field, Fields, Ident, Lit, Variant};
 
 #[cfg(feature = "ser")]
 #[proc_macro_derive(SerXml, attributes(attr, rename, text))]
 pub fn derive_serxml(input: TokenStream) -> TokenStream {
+    use syn::DataEnum;
+
     let input = parse_macro_input!(input as DeriveInput);
-    let name = input.ident;
-    let fields = match input.data {
+    let rename = get_rename_attr(&input.attrs).unwrap_or(input.ident.to_string());
+    match input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(ref fields),
             ..
-        }) => &fields.named,
-        _ => panic!("SerXml can only be derived for structs with named fields"),
-    };
-    let rename = get_rename_attr(&input.attrs).unwrap_or(name.to_string());
-
-    let mut regular_fields = Vec::new();
-    let mut attr_fields = Vec::new();
-    let mut text_field = None;
-    for field in fields {
-        let field_name = field.ident.as_ref().unwrap();
-        let is_attr = field.attrs.iter().any(|attr| attr.path().is_ident("attr"));
-        let is_text = field.attrs.iter().any(|attr| attr.path().is_ident("text"));
-        let rename = get_rename_attr(&field.attrs);
-        let is_rename = rename.is_some();
-        let rename = rename.unwrap_or(field_name.to_string());
-        match (is_attr, is_text) {
-            (true, true) => panic!("#[attr] and #[text] are incompatible"),
-            (true, false) => attr_fields.push((field_name, rename)),
-            (false, true) if text_field.is_some() => panic!("only one #[text] field is allowed"),
-            (false, true) if !regular_fields.is_empty() => {
-                panic!("#[text] is incompatible with regular fields")
-            }
-            (false, true) if is_rename => panic!("#[text] and #[rename] are incompatible"),
-            (false, true) => text_field = Some(field_name),
-            (false, false) if text_field.is_some() => {
-                panic!("#[text] is incompatible with regular fields")
-            }
-            (false, false) => regular_fields.push((field_name, rename)),
+        }) => derive_serxml_struct(&input.ident, &rename, &fields.named),
+        Data::Enum(DataEnum { variants, .. }) => {
+            derive_serxml_enum(&input.ident, &rename, &variants)
         }
+        _ => panic!("SerXml can only be derived for structs with named fields or enums"),
     }
+}
 
-    let ser_body = match text_field {
-        Some(text_field) => vec![quote! { ::nanoxml::derive::SerXmlNoAttrs::ser_as_body(&self.#text_field, xml)?; }],
-        None => regular_fields
+#[cfg(feature = "ser")]
+fn derive_serxml_struct(
+    name: &Ident,
+    rename: &str,
+    fields: &Punctuated<Field, Comma>,
+) -> TokenStream {
+    let xml_fields = get_xml_fields(fields);
+
+    let ser_body = match xml_fields.text {
+        Some(text_field) => {
+            vec![quote! { ::nanoxml::derive::SerXmlNoAttrs::ser_as_body(&self.#text_field, xml)?; }]
+        }
+        None => xml_fields
+            .regular
             .iter()
-            .map(|(field, rename)| quote! { ::nanoxml::derive::SerXml::ser(&self.#field, xml, #rename)?; })
+            .map(|field| {
+                let RenamedField {
+                    field_name,
+                    renamed,
+                } = field;
+                quote! { ::nanoxml::derive::SerXml::ser(&self.#field_name, xml, #renamed)?; }
+            })
             .collect(),
     };
 
-    let ser_attrs: Vec<_> = attr_fields
+    let ser_attrs: Vec<_> = xml_fields.attrs
         .iter()
-        .map(|(field, rename)| quote! { ::nanoxml::derive::SerXmlAsAttr::ser_as_attr(&self.#field, xml, #rename)?; })
+        .map(|field| {
+            let RenamedField {
+                field_name,
+                renamed,
+            } = field;
+            quote! { ::nanoxml::derive::SerXmlAsAttr::ser_as_attr(&self.#field_name, xml, #renamed)?; }
+        })
         .collect();
 
     let serxml_impl = quote! {
@@ -71,7 +76,7 @@ pub fn derive_serxml(input: TokenStream) -> TokenStream {
         }
     };
 
-    let no_attr_impl = match attr_fields.len() {
+    let no_attr_impl = match xml_fields.attrs.len() {
         0 => quote! { impl ::nanoxml::derive::SerXmlNoAttrs for #name {} },
         _ => quote! {},
     };
@@ -85,6 +90,59 @@ pub fn derive_serxml(input: TokenStream) -> TokenStream {
     let full_impl = quote! {
         #serxml_impl
         #no_attr_impl
+        #top_level_impl
+    };
+
+    full_impl.into()
+}
+
+#[cfg(feature = "ser")]
+fn derive_serxml_enum(
+    name: &Ident,
+    rename: &str,
+    variants: &Punctuated<Variant, Comma>,
+) -> TokenStream {
+    let variants = get_xml_variants(variants);
+
+    let cases: Vec<_> = variants
+        .iter()
+        .map(|variant| {
+            let RenamedField {
+                field_name: variant_name,
+                renamed,
+            } = variant;
+            quote! { Self::#variant_name => xml.text(#renamed), }
+        })
+        .collect();
+
+    let serxml_impl = quote! {
+        impl ::nanoxml::derive::SerXml for #name {
+            fn ser_body<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
+                match self {
+                    #(#cases)*
+                }
+            }
+
+            fn ser_attrs<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
+                Ok(())
+            }
+        }
+    };
+
+    let no_attr_impl = quote! { impl ::nanoxml::derive::SerXmlNoAttrs for #name {} };
+
+    let as_attr_impl = quote! { impl ::nanoxml::derive::SerXmlAsAttr for #name {} };
+
+    let top_level_impl = quote! {
+        impl ::nanoxml::derive::SerXmlTopLevel for #name {
+            const TAG_NAME: &'static str = #rename;
+        }
+    };
+
+    let full_impl = quote! {
+        #serxml_impl
+        #no_attr_impl
+        #as_attr_impl
         #top_level_impl
     };
 
@@ -106,4 +164,68 @@ fn get_rename_attr(attrs: &[Attribute]) -> Option<String> {
             _ => None,
         })
         .map(|lit| lit.value())
+}
+
+struct XmlFields<'a> {
+    regular: Vec<RenamedField<'a>>,
+    attrs: Vec<RenamedField<'a>>,
+    text: Option<&'a Ident>,
+}
+
+struct RenamedField<'a> {
+    field_name: &'a Ident,
+    renamed: String,
+}
+
+fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
+    let mut regular = Vec::new();
+    let mut attrs = Vec::new();
+    let mut text = None;
+    for field in fields {
+        let field_name = field.ident.as_ref().unwrap();
+        let is_attr = field.attrs.iter().any(|attr| attr.path().is_ident("attr"));
+        let is_text = field.attrs.iter().any(|attr| attr.path().is_ident("text"));
+        let rename = get_rename_attr(&field.attrs);
+        let is_rename = rename.is_some();
+        let renamed = rename.unwrap_or(field_name.to_string());
+        match (is_attr, is_text) {
+            (true, true) => panic!("#[attr] and #[text] are incompatible"),
+            (true, false) => attrs.push(RenamedField {
+                field_name,
+                renamed,
+            }),
+            (false, true) if text.is_some() => panic!("only one #[text] field is allowed"),
+            (false, true) if !regular.is_empty() => {
+                panic!("#[text] is incompatible with regular fields")
+            }
+            (false, true) if is_rename => panic!("#[text] and #[rename] are incompatible"),
+            (false, true) => text = Some(field_name),
+            (false, false) if text.is_some() => {
+                panic!("#[text] is incompatible with regular fields")
+            }
+            (false, false) => regular.push(RenamedField {
+                field_name,
+                renamed,
+            }),
+        }
+    }
+    XmlFields {
+        regular,
+        attrs,
+        text,
+    }
+}
+
+fn get_xml_variants(variants: &Punctuated<Variant, Comma>) -> Vec<RenamedField> {
+    variants
+        .iter()
+        .map(|field| {
+            let field_name = &field.ident;
+            let renamed = get_rename_attr(&field.attrs).unwrap_or(field_name.to_string());
+            RenamedField {
+                field_name,
+                renamed,
+            }
+        })
+        .collect()
 }

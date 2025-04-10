@@ -6,6 +6,8 @@ mod ser {
     use core::fmt::Error as FmtError;
     use core::fmt::Result as FmtResult;
     use core::fmt::Write;
+    use core::net::Ipv4Addr;
+    use core::net::Ipv6Addr;
 
     use crate::ser::XmlBuilder;
 
@@ -88,6 +90,8 @@ mod ser {
     impl_ser_primitive!(f64);
     impl_ser_primitive!(bool);
     impl_ser_primitive!(str);
+    impl_ser_primitive!(Ipv4Addr);
+    impl_ser_primitive!(Ipv6Addr);
 
     #[cfg(feature = "alloc")]
     impl_ser_primitive!(String);
