@@ -59,35 +59,6 @@ mod ser {
         }
     }
 
-    impl<T: SerXml> SerXml for Option<T> {
-        fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
-            match self {
-                Some(t) => t.ser_body(xml),
-                None => Ok(()),
-            }
-        }
-
-        fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
-            match self {
-                Some(t) => t.ser_attrs(xml),
-                None => Ok(()),
-            }
-        }
-
-        fn ser<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, tag_name: &str) -> FmtResult {
-            match self {
-                Some(t) => {
-                    xml.tag_open_start(tag_name)?;
-                    t.ser_attrs(xml)?;
-                    xml.tag_open_end()?;
-                    t.ser_body(xml)?;
-                    xml.tag_close(tag_name)
-                }
-                None => Ok(()),
-            }
-        }
-    }
-
     macro_rules! impl_ser {
         ($ty:ty) => {
             impl SerXml for $ty {
@@ -120,6 +91,50 @@ mod ser {
 
     #[cfg(feature = "alloc")]
     impl_ser!(String);
+
+    impl<T: SerXml> SerXml for Option<T> {
+        fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+            match self {
+                Some(t) => t.ser_body(xml),
+                None => Ok(()),
+            }
+        }
+
+        fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+            match self {
+                Some(t) => t.ser_attrs(xml),
+                None => Ok(()),
+            }
+        }
+
+        fn ser<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, tag_name: &str) -> FmtResult {
+            match self {
+                Some(t) => {
+                    xml.tag_open_start(tag_name)?;
+                    t.ser_attrs(xml)?;
+                    xml.tag_open_end()?;
+                    t.ser_body(xml)?;
+                    xml.tag_close(tag_name)
+                }
+                None => Ok(()),
+            }
+        }
+    }
+
+    impl<T: SerXmlNoAttrs> SerXmlNoAttrs for Option<T> {}
+
+    impl<T: SerXmlAsAttr> SerXmlAsAttr for Option<T> {
+        fn ser_as_attr<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, attr_key: &str) -> FmtResult {
+            match self {
+                Some(t) => {
+                    xml.attr_start(attr_key)?;
+                    t.ser_body(xml)?;
+                    xml.attr_end()
+                }
+                None => Ok(()),
+            }
+        }
+    }
 
     #[cfg(feature = "heapless")]
     impl<const N: usize> SerXml for heapless::String<N> {
