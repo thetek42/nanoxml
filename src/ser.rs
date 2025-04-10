@@ -1,21 +1,16 @@
 // TODO: derives
 
-use core::fmt::Error as FmtError;
+use core::fmt::Arguments;
 use core::fmt::Result as FmtResult;
 use core::fmt::Write;
 
 pub struct XmlBuilder<'w, W: Write> {
-    writer: &'w mut W,
+    pub(crate) writer: &'w mut W,
 }
 
 impl<'w, W: Write> XmlBuilder<'w, W> {
     pub fn new(writer: &'w mut W) -> Self {
         Self { writer }
-    }
-
-    pub fn new_with_xml_header(writer: &'w mut W) -> Result<Self, FmtError> {
-        writer.write_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")?;
-        Ok(Self { writer })
     }
 
     pub fn tag_open(&mut self, tag: &str) -> FmtResult {
@@ -42,10 +37,18 @@ impl<'w, W: Write> XmlBuilder<'w, W> {
         write!(self.writer, "<{tag}/>")
     }
 
-    pub fn attribute(&mut self, key: &str, value: &str) -> FmtResult {
-        write!(self.writer, " {key}=\"")?;
-        write_escaped(self.writer, value)?;
+    pub fn attr_start(&mut self, key: &str) -> FmtResult {
+        write!(self.writer, " {key}=\"")
+    }
+
+    pub fn attr_end(&mut self) -> FmtResult {
         self.writer.write_char('"')
+    }
+
+    pub fn attr(&mut self, key: &str, value: &str) -> FmtResult {
+        self.attr_start(key)?;
+        self.text(value)?;
+        self.attr_end()
     }
 
     pub fn text(&mut self, text: &str) -> FmtResult {
@@ -61,9 +64,23 @@ impl<'w, W: Write> XmlBuilder<'w, W> {
     pub fn tag_open_attrs(&mut self, tag: &str, attrs: &[(&str, &str)]) -> FmtResult {
         self.tag_open_start(tag)?;
         for attr in attrs {
-            self.attribute(attr.0, attr.1)?;
+            self.attr(attr.0, attr.1)?;
         }
         self.tag_open_end()
+    }
+}
+
+impl<W: Write> Write for XmlBuilder<'_, W> {
+    fn write_str(&mut self, s: &str) -> FmtResult {
+        self.writer.write_str(s)
+    }
+
+    fn write_char(&mut self, c: char) -> FmtResult {
+        self.writer.write_char(c)
+    }
+
+    fn write_fmt(&mut self, args: Arguments<'_>) -> FmtResult {
+        self.writer.write_fmt(args)
     }
 }
 

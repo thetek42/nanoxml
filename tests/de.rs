@@ -28,8 +28,8 @@ fn de() {
     xml.tag_open_start("empty").unwrap();
     xml.tag_close("").unwrap();
     xml.tag_open_start("body").unwrap();
-    let (style_key, style_value) = xml.attribute().unwrap();
-    let (font_key, font_value) = xml.attribute().unwrap();
+    let (style_key, style_value) = xml.attr().unwrap();
+    let (font_key, font_value) = xml.attr().unwrap();
     xml.tag_open_end().unwrap();
     let body = xml.text().unwrap();
     xml.tag_close("body").unwrap();

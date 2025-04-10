@@ -7,9 +7,9 @@ extern crate alloc;
 use alloc::{borrow::Cow, string::String};
 
 pub struct XmlParser<'a> {
-    s: &'a str,
-    n: usize,
-    in_tag: bool,
+    pub(crate) s: &'a str,
+    pub(crate) n: usize,
+    pub(crate) in_tag: bool,
 }
 
 impl<'a> XmlParser<'a> {
@@ -94,7 +94,7 @@ impl<'a> XmlParser<'a> {
         }
     }
 
-    pub fn attribute(&mut self) -> Result<(&'a str, XmlStr<'a>), XmlError> {
+    pub fn attr(&mut self) -> Result<(&'a str, XmlStr<'a>), XmlError> {
         match self.next()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::Attribute(key, value) => Ok((key, value)),
             _ => Err(XmlError::UnexpectedToken),
@@ -185,7 +185,7 @@ pub enum XmlToken<'a> {
 
 #[derive(Debug)]
 pub struct XmlStr<'a> {
-    s: &'a str,
+    pub(crate) s: &'a str,
 }
 
 impl<'a> XmlStr<'a> {
