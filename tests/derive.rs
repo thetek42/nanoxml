@@ -1,7 +1,9 @@
 #![allow(unused)]
 
+use std::borrow::Cow;
 use std::net::Ipv4Addr;
 
+use nanoxml::de::XmlStr;
 use nanoxml::derive::de::{DeXml, DeXmlTopLevel};
 use nanoxml::derive::ser::{SerXml, SerXmlTopLevel};
 
@@ -44,6 +46,12 @@ struct Id {
     id: u64,
 }
 
+#[derive(Debug, DeXml, PartialEq, SerXml)]
+struct Lifetimed<'a> {
+    str: XmlStr<'a>,
+    cow: Cow<'a, str>,
+}
+
 #[test]
 fn derive() {
     let user = User {
@@ -68,4 +76,11 @@ fn derive() {
 
     let reconstructed = User::deserialize_str(&xml).unwrap();
     assert_eq!(user, reconstructed);
+
+    let lifetimed_xml = "<Lifetimed><str>foo</str><cow>bar</cow></Lifetimed>";
+    let lifetimed = Lifetimed::deserialize_str(lifetimed_xml).unwrap();
+    assert_eq!(lifetimed.str, "foo");
+    assert_eq!(lifetimed.cow, "bar");
+    let xml_reconstructed = lifetimed.serialize_to_string();
+    assert_eq!(lifetimed_xml, xml_reconstructed);
 }

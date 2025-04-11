@@ -4,6 +4,7 @@ use core::fmt::Write;
 use core::net::Ipv4Addr;
 use core::net::Ipv6Addr;
 
+use crate::de::XmlStr;
 use crate::ser::XmlBuilder;
 
 pub use nanoxml_derive::SerXml;
@@ -12,7 +13,7 @@ pub use nanoxml_derive::SerXml;
 extern crate alloc;
 
 #[cfg(feature = "alloc")]
-use alloc::{string::String, vec::Vec};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 
 pub trait SerXml {
     fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult;
@@ -87,6 +88,32 @@ impl_ser_primitive!(Ipv6Addr);
 
 #[cfg(feature = "alloc")]
 impl_ser_primitive!(String);
+
+#[cfg(feature = "alloc")]
+impl<'a> SerXml for Cow<'a, str> {
+    fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        write!(xml.writer, "{}", self.as_ref())
+    }
+
+    fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        _ = xml;
+        Ok(())
+    }
+}
+
+impl<'a> SerXmlAsAttr for Cow<'a, str> {}
+
+#[cfg(feature = "de")]
+impl<'a> SerXml for XmlStr<'a> {
+    fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        write!(xml.writer, "{}", self.raw())
+    }
+
+    fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        _ = xml;
+        Ok(())
+    }
+}
 
 impl<T: SerXml> SerXml for Option<T> {
     fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {

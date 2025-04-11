@@ -1,23 +1,25 @@
+#![allow(unused)]
+
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
 use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Field, Fields};
-use syn::{Ident, Lit, Type, Variant};
+use syn::{Attribute, Data, DataEnum, DataStruct, DeriveInput, Expr, Field};
+use syn::{Fields, GenericParam, Generics, Ident, Lifetime, LifetimeParam};
+use syn::{Lit, Type, Variant};
 
 #[cfg(feature = "ser")]
 #[proc_macro_derive(SerXml, attributes(attr, rename, seq, text))]
 pub fn derive_serxml(input: TokenStream) -> TokenStream {
-    use syn::DataEnum;
-
     let input = parse_macro_input!(input as DeriveInput);
     let rename = get_rename_attr(&input.attrs).unwrap_or(input.ident.to_string());
     match input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(ref fields),
             ..
-        }) => derive_serxml_struct(&input.ident, &rename, &fields.named),
+        }) => derive_serxml_struct(&input.ident, &rename, &fields.named, input.generics),
         Data::Enum(DataEnum { variants, .. }) => {
             derive_serxml_enum(&input.ident, &rename, &variants)
         }
@@ -30,8 +32,11 @@ fn derive_serxml_struct(
     name: &Ident,
     rename: &str,
     fields: &Punctuated<Field, Comma>,
+    generics: Generics,
 ) -> TokenStream {
     let xml_fields = get_xml_fields(fields);
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let ser_body = match xml_fields.text {
         Some(text_field) => {
@@ -64,7 +69,7 @@ fn derive_serxml_struct(
         .collect();
 
     let serxml_impl = quote! {
-        impl ::nanoxml::derive::ser::SerXml for #name {
+        impl #impl_generics ::nanoxml::derive::ser::SerXml for #name #ty_generics #where_clause {
             fn ser_body<W: ::core::fmt::Write>(&self, __xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 #(#ser_body)*
                 Ok(())
@@ -78,7 +83,7 @@ fn derive_serxml_struct(
     };
 
     let top_level_impl = quote! {
-        impl ::nanoxml::derive::ser::SerXmlTopLevel for #name {
+        impl #impl_generics ::nanoxml::derive::ser::SerXmlTopLevel for #name #ty_generics #where_clause {
             const TAG_NAME: &'static str = #rename;
         }
     };
@@ -144,15 +149,13 @@ fn derive_serxml_enum(
 #[cfg(feature = "de")]
 #[proc_macro_derive(DeXml, attributes(attr, rename, seq, text))]
 pub fn derive_dexml(input: TokenStream) -> TokenStream {
-    use syn::DataEnum;
-
     let input = parse_macro_input!(input as DeriveInput);
     let rename = get_rename_attr(&input.attrs).unwrap_or(input.ident.to_string());
     match input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(ref fields),
             ..
-        }) => derive_dexml_struct(&input.ident, &rename, &fields.named),
+        }) => derive_dexml_struct(&input.ident, &rename, &fields.named, input.generics),
         Data::Enum(DataEnum { variants, .. }) => {
             derive_dexml_enum(&input.ident, &rename, &variants)
         }
@@ -165,8 +168,25 @@ fn derive_dexml_struct(
     name: &Ident,
     rename: &str,
     fields: &Punctuated<Field, Comma>,
+    generics: Generics,
 ) -> TokenStream {
     let xml_fields = get_xml_fields(fields);
+
+    let mut generics_clone = generics.clone();
+    let lifetime_param = match generics.lifetimes().next() {
+        Some(lt) => quote! { <#lt> },
+        None => {
+            generics_clone
+                .params
+                .push(GenericParam::Lifetime(LifetimeParam::new(Lifetime::new(
+                    "'a",
+                    Span::call_site(),
+                ))));
+            quote! { <'a> }
+        }
+    };
+    let (impl_generics, _, _) = generics_clone.split_for_impl();
+    let (_, ty_generics, where_clause) = generics.split_for_impl();
 
     let field_init: Vec<_> = xml_fields
         .all
@@ -260,7 +280,7 @@ fn derive_dexml_struct(
         .collect();
 
     let dexml_impl = quote! {
-        impl<'a> ::nanoxml::derive::de::DeXml<'a> for #name {
+        impl #lifetime_param ::nanoxml::derive::de::DeXml #lifetime_param for #name #ty_generics #where_clause {
             fn de_xml(__parser: &mut ::nanoxml::de::XmlParser<'a>) -> Result<Self, ::nanoxml::de::XmlError> {
                 #(#field_init)*
                 while let Ok((__attr_key, __attr_value)) = __parser.attr_or_tag_open_end()? {
@@ -276,7 +296,7 @@ fn derive_dexml_struct(
     };
 
     let top_level_impl = quote! {
-        impl ::nanoxml::derive::de::DeXmlTopLevel<'_> for #name {
+        impl #impl_generics ::nanoxml::derive::de::DeXmlTopLevel #lifetime_param for #name #ty_generics #where_clause {
             const TAG_NAME: &'static str = #rename;
         }
     };
