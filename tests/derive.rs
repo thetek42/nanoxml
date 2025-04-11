@@ -22,6 +22,7 @@ struct User {
     baz: Option<String>,
     #[attr]
     qux: Option<String>,
+    #[seq]
     multi: Vec<i32>,
     ip: Ipv4Addr,
     role: Role,

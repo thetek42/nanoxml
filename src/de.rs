@@ -335,6 +335,8 @@ pub enum XmlError {
     InvalidValue,
     DuplicateField,
     MissingField,
+    SeqOverflow,
+    SeqUnderflow,
 }
 
 fn skip_xml_header(s: &str) -> Result<&str, XmlError> {

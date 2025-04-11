@@ -1,3 +1,4 @@
+use core::mem::MaybeUninit;
 use core::net::{Ipv4Addr, Ipv6Addr};
 use core::str::FromStr;
 
@@ -9,7 +10,7 @@ pub use nanoxml_derive::DeXml;
 extern crate alloc;
 
 #[cfg(feature = "alloc")]
-use alloc::{borrow::Cow, string::String};
+use alloc::{borrow::Cow, string::String, vec::Vec};
 
 pub trait DeXml<'a>: Sized + 'a {
     fn de_xml(parser: &mut XmlParser<'a>) -> Result<Self, XmlError>;
@@ -17,6 +18,15 @@ pub trait DeXml<'a>: Sized + 'a {
 
 pub trait DeXmlAttr<'a>: Sized + 'a {
     fn de_xml_attr(s: XmlStr<'a>) -> Result<Self, XmlError>;
+}
+
+pub trait DeXmlSeq<'a>: Sized + 'a {
+    type Intermediate;
+
+    fn new_seq() -> Self::Intermediate;
+    fn push_item(this: &mut Self::Intermediate, parser: &mut XmlParser<'a>)
+    -> Result<(), XmlError>;
+    fn finish(this: Self::Intermediate) -> Result<Self, XmlError>;
 }
 
 impl<'a, T: DeXmlAttr<'a>> DeXml<'a> for T {
@@ -88,5 +98,82 @@ impl DeXmlAttr<'_> for String {
 impl<const N: usize> DeXmlAttr<'_> for heapless::String<N> {
     fn de_xml_attr(s: XmlStr<'_>) -> Result<Self, XmlError> {
         s.heapless().map_err(|_| XmlError::InvalidValue)
+    }
+}
+
+impl<'a, T: DeXml<'a>> DeXmlSeq<'a> for Vec<T> {
+    type Intermediate = Self;
+
+    fn new_seq() -> Self::Intermediate {
+        Self::new()
+    }
+
+    fn push_item(
+        this: &mut Self::Intermediate,
+        parser: &mut XmlParser<'a>,
+    ) -> Result<(), XmlError> {
+        Ok(this.push(T::de_xml(parser)?))
+    }
+
+    fn finish(this: Self::Intermediate) -> Result<Self, XmlError> {
+        Ok(this)
+    }
+}
+
+#[cfg(feature = "heapless")]
+impl<'a, T: DeXml<'a>, const N: usize> DeXmlSeq<'a> for heapless::Vec<T, N> {
+    type Intermediate = Self;
+
+    fn new_seq() -> Self::Intermediate {
+        Self::new()
+    }
+
+    fn push_item(
+        this: &mut Self::Intermediate,
+        parser: &mut XmlParser<'a>,
+    ) -> Result<(), XmlError> {
+        this.push(T::de_xml(parser)?)
+            .map_err(|_| XmlError::SeqOverflow)
+    }
+
+    fn finish(this: Self::Intermediate) -> Result<Self, XmlError> {
+        Ok(this)
+    }
+}
+
+// this stuff is required because rust stoopid
+trait UninitArray<T, const N: usize> {
+    const UNINIT_ELEM: MaybeUninit<T> = MaybeUninit::uninit();
+    const UNINIT_ARRAY: [MaybeUninit<T>; N] = [Self::UNINIT_ELEM; N];
+}
+
+impl<T, const N: usize> UninitArray<T, N> for [T; N] {}
+
+impl<'a, T: DeXml<'a>, const N: usize> DeXmlSeq<'a> for [T; N] {
+    type Intermediate = ([MaybeUninit<T>; N], usize);
+
+    fn new_seq() -> Self::Intermediate {
+        (Self::UNINIT_ARRAY, 0)
+    }
+
+    fn push_item(
+        this: &mut Self::Intermediate,
+        parser: &mut XmlParser<'a>,
+    ) -> Result<(), XmlError> {
+        if this.1 >= N {
+            Err(XmlError::SeqOverflow)
+        } else {
+            this.0[this.1].write(T::de_xml(parser)?);
+            this.1 += 1;
+            Ok(())
+        }
+    }
+
+    fn finish(this: Self::Intermediate) -> Result<Self, XmlError> {
+        if this.1 == N {
+            Ok(unsafe { MaybeUninit::array_assume_init(this.0) })
+        } else {
+            Err(XmlError::SeqUnderflow)
+        }
     }
 }

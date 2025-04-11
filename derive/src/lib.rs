@@ -1,14 +1,13 @@
-#![allow(unused_imports)]
-
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
-use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Field, Fields, Ident, Lit, Variant};
-use syn::{Type, parse_macro_input};
+use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Field, Fields};
+use syn::{Ident, Lit, Type, Variant};
 
 #[cfg(feature = "ser")]
-#[proc_macro_derive(SerXml, attributes(attr, rename, text))]
+#[proc_macro_derive(SerXml, attributes(attr, rename, seq, text))]
 pub fn derive_serxml(input: TokenStream) -> TokenStream {
     use syn::DataEnum;
 
@@ -143,7 +142,7 @@ fn derive_serxml_enum(
 }
 
 #[cfg(feature = "de")]
-#[proc_macro_derive(DeXml, attributes(attr, rename, text))]
+#[proc_macro_derive(DeXml, attributes(attr, rename, seq, text))]
 pub fn derive_dexml(input: TokenStream) -> TokenStream {
     use syn::DataEnum;
 
@@ -173,11 +172,16 @@ fn derive_dexml_struct(
         .all
         .iter()
         .map(|field| {
-            let TypedField { field_name, ty } = field;
-            if is_vec(ty) {
-                quote! { let mut #field_name = Vec::new(); }
-            } else {
-                quote! { let mut #field_name = None; }
+            let TypedField {
+                field_name,
+                field_type,
+                real_type,
+            } = field;
+            match field_type {
+                FieldType::Seq => {
+                    quote! { let mut #field_name = <#real_type as ::nanoxml::derive::de::DeXmlSeq>::new_seq(); }
+                }
+                _ => quote! { let mut #field_name = None; },
             }
         })
         .collect();
@@ -215,13 +219,12 @@ fn derive_dexml_struct(
                         field_name,
                         renamed,
                     } = field;
-                    let ty = xml_fields.all.iter().find(|f| *f.field_name == field_name.to_string()).unwrap().ty;
-                    if is_vec(ty) {
-                        quote! {
-                            #renamed => #field_name.push(::nanoxml::derive::de::DeXml::de_xml(parser)?),
-                        }
-                    } else {
-                        quote! {
+                    let TypedField { field_type, real_type, .. } = xml_fields.all.iter().find(|f| *f.field_name == field_name.to_string()).unwrap();
+                    match field_type {
+                        FieldType::Seq => quote! {
+                            #renamed => <#real_type as ::nanoxml::derive::de::DeXmlSeq>::push_item(&mut #field_name, parser)?,
+                        },
+                        _ => quote! {
                             #renamed => {
                                 if #field_name.is_some() {
                                     return Err(::nanoxml::de::XmlError::DuplicateField);
@@ -247,21 +250,12 @@ fn derive_dexml_struct(
         .all
         .iter()
         .map(|field| {
-            let TypedField { field_name, ty } = field;
-            if !is_vec(ty) && !is_option(ty) {
-                quote! { let #field_name = #field_name.ok_or(::nanoxml::de::XmlError::MissingField)?; }
-            } else {
-                quote! {}
+            let TypedField { field_name, field_type, .. } = field;
+            match field_type {
+                FieldType::Normal => quote! { #field_name: #field_name.ok_or(::nanoxml::de::XmlError::MissingField)?, },
+                FieldType::Option => quote! { #field_name, },
+                FieldType::Seq => quote! { #field_name: ::nanoxml::derive::de::DeXmlSeq::finish(#field_name)?, },
             }
-        })
-        .collect();
-
-    let field_returns: Vec<_> = xml_fields
-        .all
-        .iter()
-        .map(|field| {
-            let TypedField { field_name, .. } = field;
-            quote! { #field_name, }
         })
         .collect();
 
@@ -276,8 +270,7 @@ fn derive_dexml_struct(
                     }
                 }
                 #regular_parse
-                #(#field_unwraps)*
-                Ok(Self { #(#field_returns)* })
+                Ok(Self { #(#field_unwraps)* })
             }
         }
     };
@@ -374,7 +367,15 @@ struct RenamedField<'a> {
 
 struct TypedField<'a> {
     field_name: &'a Ident,
-    ty: &'a Type,
+    field_type: FieldType,
+    real_type: &'a Type,
+}
+
+#[derive(Copy, Clone)]
+enum FieldType {
+    Normal,
+    Option,
+    Seq,
 }
 
 fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
@@ -384,9 +385,17 @@ fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
     let mut all = Vec::new();
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
+        let field_type = if is_option(&field.ty) {
+            FieldType::Option
+        } else if field.attrs.iter().any(|attr| attr.path().is_ident("seq")) {
+            FieldType::Seq
+        } else {
+            FieldType::Normal
+        };
         all.push(TypedField {
             field_name,
-            ty: &field.ty,
+            field_type,
+            real_type: &field.ty,
         });
         let is_attr = field.attrs.iter().any(|attr| attr.path().is_ident("attr"));
         let is_text = field.attrs.iter().any(|attr| attr.path().is_ident("text"));
@@ -443,13 +452,7 @@ fn is_option(ty: &Type) -> bool {
     )
 }
 
-fn is_vec(ty: &Type) -> bool {
-    check_type(ty, &["Vec|", "std|vec|Vec|", "alloc|vec|Vec|"])
-}
-
 fn check_type(ty: &Type, valid: &[&str]) -> bool {
-    use syn::{GenericArgument, Path, PathArguments, PathSegment};
-
     let path = match *ty {
         Type::Path(ref path) if path.qself.is_none() => &path.path,
         _ => return false,
