@@ -1,3 +1,4 @@
+#![feature(iter_advance_by)]
 #![no_std]
 
 #[cfg(feature = "de")]

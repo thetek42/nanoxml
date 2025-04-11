@@ -304,6 +304,10 @@ fn derive_dexml_enum(
 ) -> TokenStream {
     let variants = get_xml_variants(variants);
 
+    if variants.is_empty() {
+        panic!("empty enum cannot be deserialized");
+    }
+
     let cases: Vec<_> = variants
         .iter()
         .map(|variant| {
@@ -311,16 +315,16 @@ fn derive_dexml_enum(
                 field_name: variant_name,
                 renamed,
             } = variant;
-            quote! { #renamed => Ok(Self::#variant_name), }
+            quote! { if s == #renamed { Ok(Self::#variant_name) } }
         })
         .collect();
 
     let serxml_impl = quote! {
         impl ::nanoxml::derive::de::DeXmlAttr<'_> for #name {
             fn de_xml_attr(s: ::nanoxml::de::XmlStr<'_>) -> Result<Self, ::nanoxml::de::XmlError> {
-                match s.raw() {
-                    #(#cases)*
-                    _ => Err(::nanoxml::de::XmlError::InvalidVariant),
+                #(#cases else)*
+                {
+                    Err(::nanoxml::de::XmlError::InvalidVariant)
                 }
             }
         }

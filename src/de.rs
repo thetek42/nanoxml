@@ -3,6 +3,8 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+use core::str::Chars;
+
 #[cfg(feature = "alloc")]
 use alloc::{borrow::Cow, string::String};
 
@@ -221,7 +223,7 @@ pub enum XmlToken<'a> {
     Text(XmlStr<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct XmlStr<'a> {
     pub(crate) s: &'a str,
 }
@@ -231,6 +233,10 @@ impl<'a> XmlStr<'a> {
         self.s
     }
 
+    pub fn iter(&self) -> XmlStrIter<'a> {
+        XmlStrIter::new(self.s)
+    }
+
     #[cfg(feature = "alloc")]
     pub fn parsed(&self) -> Cow<'a, str> {
         let mut i = 0;
@@ -238,23 +244,12 @@ impl<'a> XmlStr<'a> {
             let s = &self.s[i..];
             let c = s.chars().next().unwrap();
             if c == '&' {
-                if let Some((c, mut rest)) = starts_with_xml_escape_code(s) {
+                if let Some((c, n)) = starts_with_xml_escape_code(&s[1..]) {
                     let mut ret = String::from(&self.s[0..i]);
                     ret.push(c);
-                    let mut i = 0;
-                    while i < rest.len() {
-                        let s = &rest[i..];
-                        let c = s.chars().next().unwrap();
-                        if c == '&' {
-                            let (c, new_rest) =
-                                starts_with_xml_escape_code(s).unwrap_or(('&', &s[1..]));
-                            ret.push(c);
-                            rest = new_rest;
-                            i = 0;
-                        } else {
-                            ret.push(c);
-                            i += c.len_utf8();
-                        }
+                    let iter = XmlStrIter::new(&s[(n + 1)..]);
+                    for c in iter {
+                        ret.push(c);
                     }
                     return Cow::Owned(ret);
                 }
@@ -266,30 +261,55 @@ impl<'a> XmlStr<'a> {
 
     #[cfg(feature = "heapless")]
     pub fn heapless<const N: usize>(&self) -> Result<heapless::String<N>, ()> {
-        if self.s.len() > N {
-            return Err(());
-        }
         let mut ret = heapless::String::new();
-        let mut i = 0;
-        let mut rest = self.s;
-        while i < rest.len() {
-            let s = &rest[i..];
-            let c = s.chars().next().unwrap();
-            if c == '&' {
-                let (c, new_rest) = starts_with_xml_escape_code(s).unwrap_or(('&', &s[1..]));
-                ret.push(c)?;
-                rest = new_rest;
-                i = 0;
-            } else {
-                ret.push(c)?;
-                i += c.len_utf8();
-            }
+        for c in self.iter() {
+            ret.push(c)?;
         }
         Ok(ret)
     }
 
     fn new(s: &'a str) -> Self {
         Self { s }
+    }
+}
+
+impl<'a> PartialEq<str> for XmlStr<'a> {
+    fn eq(&self, other: &str) -> bool {
+        self.iter().eq(other.chars())
+    }
+}
+
+impl<'a> PartialEq<&str> for XmlStr<'a> {
+    fn eq(&self, other: &&str) -> bool {
+        self.iter().eq(other.chars())
+    }
+}
+
+pub struct XmlStrIter<'a> {
+    chars: Chars<'a>,
+}
+
+impl<'a> XmlStrIter<'a> {
+    fn new(s: &'a str) -> Self {
+        Self { chars: s.chars() }
+    }
+}
+
+impl<'a> Iterator for XmlStrIter<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.chars.next()? {
+            '&' => {
+                if let Some((c, n)) = starts_with_xml_escape_code(self.chars.as_str()) {
+                    self.chars.advance_by(n).unwrap();
+                    Some(c)
+                } else {
+                    Some('&')
+                }
+            }
+            c => Some(c),
+        }
     }
 }
 
@@ -330,17 +350,17 @@ fn skip_xml_header(s: &str) -> Result<&str, XmlError> {
 }
 
 #[cfg(feature = "alloc")]
-fn starts_with_xml_escape_code(s: &str) -> Option<(char, &str)> {
-    if let Some(rest) = s[1..].strip_prefix("lt;") {
-        Some(('<', rest))
-    } else if let Some(rest) = s[1..].strip_prefix("gt;") {
-        Some(('>', rest))
-    } else if let Some(rest) = s[1..].strip_prefix("amp;") {
-        Some(('&', rest))
-    } else if let Some(rest) = s[1..].strip_prefix("quot;") {
-        Some(('"', rest))
-    } else if let Some(rest) = s[1..].strip_prefix("apos;") {
-        Some(('\'', rest))
+fn starts_with_xml_escape_code(s: &str) -> Option<(char, usize)> {
+    if s.starts_with("lt;") {
+        Some(('<', 3))
+    } else if s.starts_with("gt;") {
+        Some(('>', 3))
+    } else if s.starts_with("amp;") {
+        Some(('&', 4))
+    } else if s.starts_with("quot;") {
+        Some(('"', 5))
+    } else if s.starts_with("apos;") {
+        Some(('\'', 5))
     } else {
         None
     }
