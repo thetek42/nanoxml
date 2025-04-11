@@ -82,17 +82,33 @@ impl_ser_primitive!(u64);
 impl_ser_primitive!(f32);
 impl_ser_primitive!(f64);
 impl_ser_primitive!(bool);
-impl_ser_primitive!(str);
 impl_ser_primitive!(Ipv4Addr);
 impl_ser_primitive!(Ipv6Addr);
 
+macro_rules! impl_ser_str {
+    ($ty:ty) => {
+        impl SerXml for $ty {
+            fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+                xml.text(self.as_ref())
+            }
+            fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+                _ = xml;
+                Ok(())
+            }
+        }
+        impl SerXmlAsAttr for $ty {}
+    };
+}
+
+impl_ser_str!(str);
+
 #[cfg(feature = "alloc")]
-impl_ser_primitive!(String);
+impl_ser_str!(String);
 
 #[cfg(feature = "alloc")]
 impl<'a> SerXml for Cow<'a, str> {
     fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
-        write!(xml.writer, "{}", self.as_ref())
+        xml.text(self.as_ref())
     }
 
     fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
@@ -101,6 +117,7 @@ impl<'a> SerXml for Cow<'a, str> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<'a> SerXmlAsAttr for Cow<'a, str> {}
 
 #[cfg(feature = "de")]
@@ -114,6 +131,9 @@ impl<'a> SerXml for XmlStr<'a> {
         Ok(())
     }
 }
+
+#[cfg(feature = "de")]
+impl<'a> SerXmlAsAttr for XmlStr<'a> {}
 
 impl<T: SerXml> SerXml for Option<T> {
     fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
