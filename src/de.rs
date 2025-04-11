@@ -92,7 +92,7 @@ impl<'a> XmlParser<'a> {
     pub fn tag_close(&mut self, expect: &str) -> Result<(), XmlError> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagClose(tag) if tag == expect => Ok(()),
-            XmlToken::TagClose(tag) if tag.is_empty() => Ok(()),
+            XmlToken::TagClose("") => Ok(()),
             XmlToken::TagClose(_) if expect.is_empty() => Ok(()),
             XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
@@ -128,7 +128,7 @@ impl<'a> XmlParser<'a> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagOpenStart(tag) => Ok(Ok(tag)),
             XmlToken::TagClose(tag) if tag == expect_close => Ok(Err(())),
-            XmlToken::TagClose(tag) if tag.is_empty() => Ok(Err(())),
+            XmlToken::TagClose("") => Ok(Err(())),
             XmlToken::TagClose(_) if expect_close.is_empty() => Ok(Err(())),
             XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
             _ => Err(XmlError::UnexpectedToken),
@@ -257,6 +257,15 @@ impl<'a> XmlStr<'a> {
             i += c.len_utf8();
         }
         Cow::Borrowed(self.s)
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn owned(&self) -> String {
+        let mut s = String::new();
+        for c in self.iter() {
+            s.push(c);
+        }
+        s
     }
 
     #[cfg(feature = "heapless")]

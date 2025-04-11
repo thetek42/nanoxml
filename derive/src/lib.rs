@@ -215,7 +215,7 @@ fn derive_dexml_struct(
                         field_name,
                         renamed,
                     } = field;
-                    let ty = xml_fields.all.iter().find(|f| f.field_name.to_string() == field_name.to_string()).unwrap().ty;
+                    let ty = xml_fields.all.iter().find(|f| *f.field_name == field_name.to_string()).unwrap().ty;
                     if is_vec(ty) {
                         quote! {
                             #renamed => #field_name.push(::nanoxml::derive::de::DeXml::de_xml(parser)?),
@@ -455,15 +455,11 @@ fn check_type(ty: &Type, valid: &[&str]) -> bool {
         _ => return false,
     };
 
-    let idents_of_path = path
-        .segments
-        .iter()
-        .into_iter()
-        .fold(String::new(), |mut acc, v| {
-            acc.push_str(&v.ident.to_string());
-            acc.push('|');
-            acc
-        });
+    let idents_of_path = path.segments.iter().fold(String::new(), |mut acc, v| {
+        acc.push_str(&v.ident.to_string());
+        acc.push('|');
+        acc
+    });
 
-    valid.iter().any(|s| &idents_of_path == *s)
+    valid.iter().any(|s| idents_of_path == *s)
 }

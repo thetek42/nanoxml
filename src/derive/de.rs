@@ -80,7 +80,7 @@ impl<'a> DeXmlAttr<'a> for Cow<'a, str> {
 #[cfg(feature = "alloc")]
 impl DeXmlAttr<'_> for String {
     fn de_xml_attr(s: XmlStr<'_>) -> Result<Self, XmlError> {
-        Ok(s.parsed().into_owned())
+        Ok(s.owned())
     }
 }
 
