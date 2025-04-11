@@ -2,10 +2,10 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{Attribute, Data, DataStruct, DeriveInput, Expr, Field, Fields, Ident, Lit, Variant};
+use syn::{Type, parse_macro_input};
 
 #[cfg(feature = "ser")]
 #[proc_macro_derive(SerXml, attributes(attr, rename, text))]
@@ -37,7 +37,7 @@ fn derive_serxml_struct(
     let ser_body = match xml_fields.text {
         Some(text_field) => {
             vec![
-                quote! { ::nanoxml::derive::ser::SerXmlNoAttrs::ser_as_body(&self.#text_field, xml)?; },
+                quote! { ::nanoxml::derive::ser::SerXmlAsAttr::ser_as_text(&self.#text_field, xml)?; },
             ]
         }
         None => xml_fields
@@ -78,11 +78,6 @@ fn derive_serxml_struct(
         }
     };
 
-    let no_attr_impl = match xml_fields.attrs.len() {
-        0 => quote! { impl ::nanoxml::derive::ser::SerXmlNoAttrs for #name {} },
-        _ => quote! {},
-    };
-
     let top_level_impl = quote! {
         impl ::nanoxml::derive::ser::SerXmlTopLevel for #name {
             const TAG_NAME: &'static str = #rename;
@@ -91,7 +86,6 @@ fn derive_serxml_struct(
 
     let full_impl = quote! {
         #serxml_impl
-        #no_attr_impl
         #top_level_impl
     };
 
@@ -131,8 +125,6 @@ fn derive_serxml_enum(
         }
     };
 
-    let no_attr_impl = quote! { impl ::nanoxml::derive::ser::SerXmlNoAttrs for #name {} };
-
     let as_attr_impl = quote! { impl ::nanoxml::derive::ser::SerXmlAsAttr for #name {} };
 
     let top_level_impl = quote! {
@@ -143,7 +135,6 @@ fn derive_serxml_enum(
 
     let full_impl = quote! {
         #serxml_impl
-        #no_attr_impl
         #as_attr_impl
         #top_level_impl
     };
@@ -163,10 +154,10 @@ pub fn derive_dexml(input: TokenStream) -> TokenStream {
             fields: Fields::Named(ref fields),
             ..
         }) => derive_dexml_struct(&input.ident, &rename, &fields.named),
-        //Data::Enum(DataEnum { variants, .. }) => {
-        //    derive_serxml_enum(&input.ident, &rename, &variants)
-        //}
-        _ => panic!("SerXml can only be derived for structs with named fields or enums"),
+        Data::Enum(DataEnum { variants, .. }) => {
+            derive_dexml_enum(&input.ident, &rename, &variants)
+        }
+        _ => panic!("DeXml can only be derived for structs with named fields or enums"),
     }
 }
 
@@ -181,7 +172,14 @@ fn derive_dexml_struct(
     let field_init: Vec<_> = xml_fields
         .all
         .iter()
-        .map(|field| quote! { let mut #field = None; })
+        .map(|field| {
+            let TypedField { field_name, ty } = field;
+            if is_vec(ty) {
+                quote! { let mut #field_name = Vec::new(); }
+            } else {
+                quote! { let mut #field_name = None; }
+            }
+        })
         .collect();
 
     let attr_parse: Vec<_> = xml_fields
@@ -193,54 +191,91 @@ fn derive_dexml_struct(
                 renamed,
             } = field;
             quote! {
-                #renamed => #field_name = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(attr_value)?),
+                #renamed => {
+                    if #field_name.is_some() {
+                        return Err(::nanoxml::de::XmlError::DuplicateField);
+                    }
+                    #field_name = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(__attr_value)?);
+                }
             }
         })
         .collect();
 
-    let regular_parse: Vec<_> = xml_fields
-        .regular
-        .iter()
-        .map(|field| {
-            let RenamedField {
-                field_name,
-                renamed,
-            } = field;
+    let regular_parse = match xml_fields.text {
+        Some(text_field) => quote! {
+            #text_field = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(parser.text()?)?);
+            parser.tag_close("")?;
+        },
+        None => {
+            let regular_parse: Vec<_> = xml_fields
+                .regular
+                .iter()
+                .map(|field| {
+                    let RenamedField {
+                        field_name,
+                        renamed,
+                    } = field;
+                    let ty = xml_fields.all.iter().find(|f| f.field_name.to_string() == field_name.to_string()).unwrap().ty;
+                    if is_vec(ty) {
+                        quote! {
+                            #renamed => #field_name.push(::nanoxml::derive::de::DeXml::de_xml(parser)?),
+                        }
+                    } else {
+                        quote! {
+                            #renamed => {
+                                if #field_name.is_some() {
+                                    return Err(::nanoxml::de::XmlError::DuplicateField);
+                                }
+                                #field_name = Some(::nanoxml::derive::de::DeXml::de_xml(parser)?);
+                            }
+                        }
+                    }
+                })
+                .collect();
             quote! {
-                #renamed => #field_name = Some(::nanoxml::derive::de::DeXml::de_xml(parser)?),
+                while let Ok((__tag)) = parser.tag_open_or_close(#rename)? {
+                    match __tag {
+                        #(#regular_parse)*
+                        _ => return Err(::nanoxml::de::XmlError::InvalidField),
+                    }
+                }
             }
-        })
-        .collect();
+        }
+    };
 
     let field_unwraps: Vec<_> = xml_fields
         .all
         .iter()
-        .map(|field| quote! { let #field = #field.ok_or(::nanoxml::de::XmlError::MissingField)?; })
+        .map(|field| {
+            let TypedField { field_name, ty } = field;
+            if !is_vec(ty) && !is_option(ty) {
+                quote! { let #field_name = #field_name.ok_or(::nanoxml::de::XmlError::MissingField)?; }
+            } else {
+                quote! {}
+            }
+        })
         .collect();
 
     let field_returns: Vec<_> = xml_fields
         .all
         .iter()
-        .map(|field| quote! { #field, })
+        .map(|field| {
+            let TypedField { field_name, .. } = field;
+            quote! { #field_name, }
+        })
         .collect();
 
     let dexml_impl = quote! {
         impl<'a> ::nanoxml::derive::de::DeXml<'a> for #name {
             fn de_xml(parser: &mut ::nanoxml::de::XmlParser<'a>) -> Result<Self, ::nanoxml::de::XmlError> {
                 #(#field_init)*
-                while let Ok((attr_key, attr_value)) = parser.attr_or_tag_open_end()? {
-                    match attr_key {
+                while let Ok((__attr_key, __attr_value)) = parser.attr_or_tag_open_end()? {
+                    match __attr_key {
                         #(#attr_parse)*
                         _ => return Err(::nanoxml::de::XmlError::InvalidField),
                     }
                 }
-                // TODO: text
-                while let Ok((tag)) = parser.tag_open_or_close(#rename)? {
-                    match tag {
-                        #(#regular_parse)*
-                        _ => return Err(::nanoxml::de::XmlError::InvalidField),
-                    }
-                }
+                #regular_parse
                 #(#field_unwraps)*
                 Ok(Self { #(#field_returns)* })
             }
@@ -255,6 +290,50 @@ fn derive_dexml_struct(
 
     let full_impl = quote! {
         #dexml_impl
+        #top_level_impl
+    };
+
+    full_impl.into()
+}
+
+#[cfg(feature = "de")]
+fn derive_dexml_enum(
+    name: &Ident,
+    rename: &str,
+    variants: &Punctuated<Variant, Comma>,
+) -> TokenStream {
+    let variants = get_xml_variants(variants);
+
+    let cases: Vec<_> = variants
+        .iter()
+        .map(|variant| {
+            let RenamedField {
+                field_name: variant_name,
+                renamed,
+            } = variant;
+            quote! { #renamed => Ok(Self::#variant_name), }
+        })
+        .collect();
+
+    let serxml_impl = quote! {
+        impl ::nanoxml::derive::de::DeXmlAttr<'_> for #name {
+            fn de_xml_attr(s: ::nanoxml::de::XmlStr<'_>) -> Result<Self, ::nanoxml::de::XmlError> {
+                match s.raw() {
+                    #(#cases)*
+                    _ => Err(::nanoxml::de::XmlError::InvalidVariant),
+                }
+            }
+        }
+    };
+
+    let top_level_impl = quote! {
+        impl ::nanoxml::derive::de::DeXmlTopLevel<'_> for #name {
+            const TAG_NAME: &'static str = #rename;
+        }
+    };
+
+    let full_impl = quote! {
+        #serxml_impl
         #top_level_impl
     };
 
@@ -281,12 +360,17 @@ struct XmlFields<'a> {
     regular: Vec<RenamedField<'a>>,
     attrs: Vec<RenamedField<'a>>,
     text: Option<&'a Ident>,
-    all: Vec<&'a Ident>,
+    all: Vec<TypedField<'a>>,
 }
 
 struct RenamedField<'a> {
     field_name: &'a Ident,
     renamed: String,
+}
+
+struct TypedField<'a> {
+    field_name: &'a Ident,
+    ty: &'a Type,
 }
 
 fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
@@ -296,7 +380,10 @@ fn get_xml_fields(fields: &Punctuated<Field, Comma>) -> XmlFields<'_> {
     let mut all = Vec::new();
     for field in fields {
         let field_name = field.ident.as_ref().unwrap();
-        all.push(field_name);
+        all.push(TypedField {
+            field_name,
+            ty: &field.ty,
+        });
         let is_attr = field.attrs.iter().any(|attr| attr.path().is_ident("attr"));
         let is_text = field.attrs.iter().any(|attr| attr.path().is_ident("text"));
         let rename = get_rename_attr(&field.attrs);
@@ -343,4 +430,36 @@ fn get_xml_variants(variants: &Punctuated<Variant, Comma>) -> Vec<RenamedField> 
             }
         })
         .collect()
+}
+
+fn is_option(ty: &Type) -> bool {
+    check_type(
+        ty,
+        &["Option|", "std|option|Option|", "core|option|Option|"],
+    )
+}
+
+fn is_vec(ty: &Type) -> bool {
+    check_type(ty, &["Vec|", "std|vec|Vec|", "alloc|vec|Vec|"])
+}
+
+fn check_type(ty: &Type, valid: &[&str]) -> bool {
+    use syn::{GenericArgument, Path, PathArguments, PathSegment};
+
+    let path = match *ty {
+        Type::Path(ref path) if path.qself.is_none() => &path.path,
+        _ => return false,
+    };
+
+    let idents_of_path = path
+        .segments
+        .iter()
+        .into_iter()
+        .fold(String::new(), |mut acc, v| {
+            acc.push_str(&v.ident.to_string());
+            acc.push('|');
+            acc
+        });
+
+    valid.iter().any(|s| &idents_of_path == *s)
 }

@@ -1,9 +1,11 @@
+#![allow(unused)]
+
 use std::net::Ipv4Addr;
 
 use nanoxml::derive::de::{DeXml, DeXmlTopLevel};
 use nanoxml::derive::ser::{SerXml, SerXmlTopLevel};
 
-#[derive(Debug, SerXml)]
+#[derive(Debug, DeXml, PartialEq, SerXml)]
 #[rename = "user"]
 struct User {
     id: Id,
@@ -25,8 +27,7 @@ struct User {
     role: Role,
 }
 
-#[derive(Debug, SerXml)]
-#[allow(unused)]
+#[derive(Debug, DeXml, PartialEq, SerXml)]
 enum Role {
     #[rename = "user"]
     User,
@@ -36,7 +37,7 @@ enum Role {
     Admin,
 }
 
-#[derive(Debug, SerXml)]
+#[derive(Debug, DeXml, PartialEq, SerXml)]
 struct Id {
     #[text]
     id: u64,
@@ -58,22 +59,12 @@ fn derive() {
         role: Role::Admin,
     };
 
+    let xml = user.serialize_to_string();
     assert_eq!(
-        user.serialize_to_string(),
+        xml,
         "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role></user>"
     );
-}
 
-#[derive(Debug, DeXml)]
-#[rename = "foo"]
-struct Foo {
-    bar: String,
-    baz: u64,
-}
-
-#[test]
-fn derive2() {
-    let s = "<foo><bar>qux</bar><baz>42</baz></foo>";
-    let foo = Foo::deserialize_str(s).unwrap();
-    assert!(matches!(foo, Foo { bar, baz: 42 } if bar == "qux"));
+    let reconstructed = User::deserialize_str(&xml).unwrap();
+    assert_eq!(user, reconstructed);
 }

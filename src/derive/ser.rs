@@ -27,17 +27,15 @@ pub trait SerXml {
     }
 }
 
-pub trait SerXmlNoAttrs: SerXml {
-    fn ser_as_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
-        self.ser_body(xml)
-    }
-}
-
-pub trait SerXmlAsAttr: SerXml + SerXmlNoAttrs {
+pub trait SerXmlAsAttr: SerXml {
     fn ser_as_attr<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, attr_key: &str) -> FmtResult {
         xml.attr_start(attr_key)?;
         self.ser_body(xml)?;
         xml.attr_end()
+    }
+
+    fn ser_as_text<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        self.ser_body(xml)
     }
 }
 
@@ -68,7 +66,6 @@ macro_rules! impl_ser_primitive {
                 Ok(())
             }
         }
-        impl SerXmlNoAttrs for $ty {}
         impl SerXmlAsAttr for $ty {}
     };
 }
@@ -119,8 +116,6 @@ impl<T: SerXml> SerXml for Option<T> {
         }
     }
 }
-
-impl<T: SerXmlNoAttrs> SerXmlNoAttrs for Option<T> {}
 
 impl<T: SerXmlAsAttr> SerXmlAsAttr for Option<T> {
     fn ser_as_attr<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, attr_key: &str) -> FmtResult {
@@ -197,9 +192,6 @@ impl<const N: usize> SerXml for heapless::String<N> {
         Ok(())
     }
 }
-
-#[cfg(feature = "heapless")]
-impl<const N: usize> SerXmlNoAttrs for heapless::String<N> {}
 
 #[cfg(feature = "heapless")]
 impl<const N: usize> SerXmlAsAttr for heapless::String<N> {}
