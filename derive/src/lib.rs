@@ -36,7 +36,7 @@ fn derive_serxml_struct(
     let ser_body = match xml_fields.text {
         Some(text_field) => {
             vec![
-                quote! { ::nanoxml::derive::ser::SerXmlAsAttr::ser_as_text(&self.#text_field, xml)?; },
+                quote! { ::nanoxml::derive::ser::SerXmlAsAttr::ser_as_text(&self.#text_field, __xml)?; },
             ]
         }
         None => xml_fields
@@ -47,7 +47,7 @@ fn derive_serxml_struct(
                     field_name,
                     renamed,
                 } = field;
-                quote! { ::nanoxml::derive::ser::SerXml::ser_xml(&self.#field_name, xml, #renamed)?; }
+                quote! { ::nanoxml::derive::ser::SerXml::ser_xml(&self.#field_name, __xml, #renamed)?; }
             })
             .collect(),
     };
@@ -59,18 +59,18 @@ fn derive_serxml_struct(
                 field_name,
                 renamed,
             } = field;
-            quote! { ::nanoxml::derive::ser::SerXmlAsAttr::ser_as_attr(&self.#field_name, xml, #renamed)?; }
+            quote! { ::nanoxml::derive::ser::SerXmlAsAttr::ser_as_attr(&self.#field_name, __xml, #renamed)?; }
         })
         .collect();
 
     let serxml_impl = quote! {
         impl ::nanoxml::derive::ser::SerXml for #name {
-            fn ser_body<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
+            fn ser_body<W: ::core::fmt::Write>(&self, __xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 #(#ser_body)*
                 Ok(())
             }
 
-            fn ser_attrs<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
+            fn ser_attrs<W: ::core::fmt::Write>(&self, __xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 #(#ser_attrs)*
                 Ok(())
             }
@@ -106,19 +106,19 @@ fn derive_serxml_enum(
                 field_name: variant_name,
                 renamed,
             } = variant;
-            quote! { Self::#variant_name => xml.text(#renamed), }
+            quote! { Self::#variant_name => __xml.text(#renamed), }
         })
         .collect();
 
     let serxml_impl = quote! {
         impl ::nanoxml::derive::ser::SerXml for #name {
-            fn ser_body<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
+            fn ser_body<W: ::core::fmt::Write>(&self, __xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 match self {
                     #(#cases)*
                 }
             }
 
-            fn ser_attrs<W: ::core::fmt::Write>(&self, xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
+            fn ser_attrs<W: ::core::fmt::Write>(&self, __xml: &mut ::nanoxml::ser::XmlBuilder<'_, W>) -> ::core::fmt::Result {
                 Ok(())
             }
         }
@@ -207,8 +207,8 @@ fn derive_dexml_struct(
 
     let regular_parse = match xml_fields.text {
         Some(text_field) => quote! {
-            #text_field = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(parser.text()?)?);
-            parser.tag_close("")?;
+            #text_field = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(__parser.text()?)?);
+            __parser.tag_close("")?;
         },
         None => {
             let regular_parse: Vec<_> = xml_fields
@@ -222,21 +222,21 @@ fn derive_dexml_struct(
                     let TypedField { field_type, real_type, .. } = xml_fields.all.iter().find(|f| *f.field_name == field_name.to_string()).unwrap();
                     match field_type {
                         FieldType::Seq => quote! {
-                            #renamed => <#real_type as ::nanoxml::derive::de::DeXmlSeq>::push_item(&mut #field_name, parser)?,
+                            #renamed => <#real_type as ::nanoxml::derive::de::DeXmlSeq>::push_item(&mut #field_name, __parser)?,
                         },
                         _ => quote! {
                             #renamed => {
                                 if #field_name.is_some() {
                                     return Err(::nanoxml::de::XmlError::DuplicateField);
                                 }
-                                #field_name = Some(::nanoxml::derive::de::DeXml::de_xml(parser)?);
+                                #field_name = Some(::nanoxml::derive::de::DeXml::de_xml(__parser)?);
                             }
                         }
                     }
                 })
                 .collect();
             quote! {
-                while let Ok((__tag)) = parser.tag_open_or_close(#rename)? {
+                while let Ok((__tag)) = __parser.tag_open_or_close(#rename)? {
                     match __tag {
                         #(#regular_parse)*
                         _ => return Err(::nanoxml::de::XmlError::InvalidField),
@@ -261,9 +261,9 @@ fn derive_dexml_struct(
 
     let dexml_impl = quote! {
         impl<'a> ::nanoxml::derive::de::DeXml<'a> for #name {
-            fn de_xml(parser: &mut ::nanoxml::de::XmlParser<'a>) -> Result<Self, ::nanoxml::de::XmlError> {
+            fn de_xml(__parser: &mut ::nanoxml::de::XmlParser<'a>) -> Result<Self, ::nanoxml::de::XmlError> {
                 #(#field_init)*
-                while let Ok((__attr_key, __attr_value)) = parser.attr_or_tag_open_end()? {
+                while let Ok((__attr_key, __attr_value)) = __parser.attr_or_tag_open_end()? {
                     match __attr_key {
                         #(#attr_parse)*
                         _ => return Err(::nanoxml::de::XmlError::InvalidField),
