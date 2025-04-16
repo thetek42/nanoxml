@@ -20,15 +20,6 @@ pub trait DeXmlAttr<'a>: Sized + 'a {
     fn de_xml_attr(s: XmlStr<'a>) -> Result<Self, XmlError>;
 }
 
-pub trait DeXmlSeq<'a>: Sized + 'a {
-    type Intermediate;
-
-    fn new_seq() -> Self::Intermediate;
-    fn push_item(this: &mut Self::Intermediate, parser: &mut XmlParser<'a>)
-    -> Result<(), XmlError>;
-    fn finish(this: Self::Intermediate) -> Result<Self, XmlError>;
-}
-
 impl<'a, T: DeXmlAttr<'a>> DeXml<'a> for T {
     fn de_xml(parser: &mut XmlParser<'a>) -> Result<Self, XmlError> {
         parser.tag_open_end()?;
@@ -36,6 +27,15 @@ impl<'a, T: DeXmlAttr<'a>> DeXml<'a> for T {
         parser.tag_close("")?;
         Self::de_xml_attr(s)
     }
+}
+
+pub trait DeXmlSeq<'a>: Sized + 'a {
+    type Intermediate;
+
+    fn new_seq() -> Self::Intermediate;
+    fn push_item(this: &mut Self::Intermediate, parser: &mut XmlParser<'a>)
+    -> Result<(), XmlError>;
+    fn finish(this: Self::Intermediate) -> Result<Self, XmlError>;
 }
 
 pub trait DeXmlTopLevel<'a>: DeXml<'a> {

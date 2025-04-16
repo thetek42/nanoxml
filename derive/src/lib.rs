@@ -82,6 +82,10 @@ fn derive_serxml_struct(
         }
     };
 
+    let attr_impl = xml_fields.iter().all(|f| f.field_kind == FieldKind::Text).then(|| quote !{
+        impl #impl_generics ::nanoxml::derive::ser::SerXmlAsAttr for #name #ty_generics #where_clause {}
+    });
+
     let top_level_impl = quote! {
         impl #impl_generics ::nanoxml::derive::ser::SerXmlTopLevel for #name #ty_generics #where_clause {
             const TAG_NAME: &'static str = #rename;
@@ -90,6 +94,7 @@ fn derive_serxml_struct(
 
     let full_impl = quote! {
         #serxml_impl
+        #attr_impl
         #top_level_impl
     };
 
