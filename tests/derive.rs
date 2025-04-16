@@ -8,41 +8,42 @@ use nanoxml::derive::de::{DeXml, DeXmlTopLevel};
 use nanoxml::derive::ser::{SerXml, SerXmlTopLevel};
 
 #[derive(Debug, DeXml, PartialEq, SerXml)]
-#[rename = "user"]
+#[nanoxml(rename = "user")]
 struct User {
     id: Id,
-    #[attr]
+    #[nanoxml(attr)]
     name: String,
-    #[attr]
-    #[rename = "dname"]
+    #[nanoxml(attr, rename = "dname")]
     display_name: String,
-    #[rename = "pass"]
+    #[nanoxml(rename = "pass")]
     password: String,
     foo: Option<String>,
     bar: Option<String>,
-    #[attr]
+    #[nanoxml(attr)]
     baz: Option<String>,
-    #[attr]
+    #[nanoxml(attr)]
     qux: Option<String>,
-    #[seq]
+    #[nanoxml(seq)]
     multi: Vec<i32>,
     ip: Ipv4Addr,
     role: Role,
+    #[nanoxml(skip_ser, default_de = "fourtytwo")]
+    skip: i32,
 }
 
 #[derive(Debug, DeXml, PartialEq, SerXml)]
 enum Role {
-    #[rename = "user"]
+    #[nanoxml(rename = "user")]
     User,
-    #[rename = "mod"]
+    #[nanoxml(rename = "mod")]
     Moderator,
-    #[rename = "admin"]
+    #[nanoxml(rename = "admin")]
     Admin,
 }
 
 #[derive(Debug, DeXml, PartialEq, SerXml)]
 struct Id {
-    #[text]
+    #[nanoxml(text)]
     id: u64,
 }
 
@@ -66,6 +67,7 @@ fn derive() {
         multi: vec![-1, 0, 1],
         ip: Ipv4Addr::new(192, 168, 0, 1),
         role: Role::Admin,
+        skip: 42,
     };
 
     let xml = user.serialize_to_string();
@@ -83,4 +85,8 @@ fn derive() {
     assert_eq!(lifetimed.cow, "bar");
     let xml_reconstructed = lifetimed.serialize_to_string();
     assert_eq!(lifetimed_xml, xml_reconstructed);
+}
+
+fn fourtytwo() -> i32 {
+    42
 }
