@@ -59,14 +59,16 @@ macro_rules! impl_de_from_str {
     };
 }
 
-impl_de_from_str!(u8);
-impl_de_from_str!(u16);
-impl_de_from_str!(u32);
-impl_de_from_str!(u64);
 impl_de_from_str!(i8);
 impl_de_from_str!(i16);
 impl_de_from_str!(i32);
 impl_de_from_str!(i64);
+impl_de_from_str!(isize);
+impl_de_from_str!(u8);
+impl_de_from_str!(u16);
+impl_de_from_str!(u32);
+impl_de_from_str!(u64);
+impl_de_from_str!(usize);
 impl_de_from_str!(f32);
 impl_de_from_str!(f64);
 impl_de_from_str!(bool);
