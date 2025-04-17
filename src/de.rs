@@ -3,6 +3,8 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+use core::error::Error;
+use core::fmt::{Display, Formatter, Result as FmtResult};
 use core::str::Chars;
 
 #[cfg(feature = "alloc")]
@@ -357,6 +359,28 @@ pub enum XmlError {
     SeqOverflow,
     SeqUnderflow,
 }
+
+impl Display for XmlError {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            Self::UnexpectedChar => write!(f, "UnexpectedChar"),
+            Self::InvalidIdentifier => write!(f, "InvalidIdentifier"),
+            Self::NameMismatch => write!(f, "NameMismatch"),
+            Self::UnexpectedToken => write!(f, "UnexpectedToken"),
+            Self::UnexpectedEof => write!(f, "UnexpectedEof"),
+            Self::TrailingChars => write!(f, "TrailingChars"),
+            Self::InvalidField => write!(f, "InvalidField"),
+            Self::InvalidVariant => write!(f, "InvalidVariant"),
+            Self::InvalidValue => write!(f, "InvalidValue"),
+            Self::DuplicateField => write!(f, "DuplicateField"),
+            Self::MissingField => write!(f, "MissingField"),
+            Self::SeqOverflow => write!(f, "SeqOverflow"),
+            Self::SeqUnderflow => write!(f, "SeqUnderflow"),
+        }
+    }
+}
+
+impl Error for XmlError {}
 
 fn skip_xml_header(s: &str) -> Result<&str, XmlError> {
     let bytes = s.as_bytes();
