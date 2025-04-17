@@ -5,7 +5,6 @@ A truly minimal XML (de)serializer for Rust.
 ## Features
 
 - serialization and deserialization of very basic XML (only attributes and elements are supported)
-- stream-based xml parsing
 - `derive` for (de)serialization of structs and enums (optional)
 - tiny codebase (~400 LoC + optional ~900 LoC for derive)
 - no runtime dependencies
