@@ -1,5 +1,5 @@
 use core::mem::MaybeUninit;
-use core::net::{Ipv4Addr, Ipv6Addr};
+use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use core::str::FromStr;
 
 use crate::de::{XmlError, XmlParser, XmlStr};
@@ -72,6 +72,7 @@ impl_de_from_str!(usize);
 impl_de_from_str!(f32);
 impl_de_from_str!(f64);
 impl_de_from_str!(bool);
+impl_de_from_str!(IpAddr);
 impl_de_from_str!(Ipv4Addr);
 impl_de_from_str!(Ipv6Addr);
 

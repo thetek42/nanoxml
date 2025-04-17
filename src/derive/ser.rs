@@ -1,6 +1,7 @@
 use core::fmt::Error as FmtError;
 use core::fmt::Result as FmtResult;
 use core::fmt::Write;
+use core::net::IpAddr;
 use core::net::Ipv4Addr;
 use core::net::Ipv6Addr;
 
@@ -84,6 +85,7 @@ impl_ser_primitive!(usize);
 impl_ser_primitive!(f32);
 impl_ser_primitive!(f64);
 impl_ser_primitive!(bool);
+impl_ser_primitive!(IpAddr);
 impl_ser_primitive!(Ipv4Addr);
 impl_ser_primitive!(Ipv6Addr);
 
