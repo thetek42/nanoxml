@@ -179,3 +179,22 @@ impl<'a, T: DeXml<'a>, const N: usize> DeXmlSeq<'a> for [T; N] {
         }
     }
 }
+
+impl<'a, T: DeXmlSeq<'a>> DeXmlSeq<'a> for Option<T> {
+    type Intermediate = T::Intermediate;
+
+    fn new_seq() -> Self::Intermediate {
+        T::new_seq()
+    }
+
+    fn push_item(
+        this: &mut Self::Intermediate,
+        parser: &mut XmlParser<'a>,
+    ) -> Result<(), XmlError> {
+        T::push_item(this, parser)
+    }
+
+    fn finish(this: Self::Intermediate) -> Result<Self, XmlError> {
+        Ok(Some(T::finish(this)?))
+    }
+}
