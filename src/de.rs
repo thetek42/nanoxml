@@ -135,6 +135,25 @@ impl<'a> XmlParser<'a> {
         }
     }
 
+    pub fn text_and_tag_close(&mut self, expect_close: &str) -> Result<XmlStr<'a>, XmlError> {
+        let mut token = self.next_token()?.ok_or(XmlError::UnexpectedEof)?;
+        let s = match token {
+            XmlToken::Text(s) => {
+                token = self.next_token()?.ok_or(XmlError::UnexpectedEof)?;
+                s
+            }
+            _ => XmlStr::new(""),
+        };
+
+        match token {
+            XmlToken::TagClose(tag) if tag == expect_close => Ok(s),
+            XmlToken::TagClose("") => Ok(s),
+            XmlToken::TagClose(_) if expect_close.is_empty() => Ok(s),
+            XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
+            _ => Err(XmlError::UnexpectedToken),
+        }
+    }
+
     pub fn check_end(&mut self) -> Result<(), XmlError> {
         match self.next_token()? {
             Some(_) => Err(XmlError::TrailingChars),

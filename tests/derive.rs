@@ -29,6 +29,7 @@ struct User {
     role: Role,
     #[nanoxml(skip_ser, default_de = "fourtytwo")]
     skip: i32,
+    empty: String,
 }
 
 #[derive(Debug, DeXml, PartialEq, SerXml)]
@@ -68,12 +69,13 @@ fn derive() {
         ip: Ipv4Addr::new(192, 168, 0, 1),
         role: Role::Admin,
         skip: 42,
+        empty: String::new(),
     };
 
     let xml = user.serialize_to_string();
     assert_eq!(
         xml,
-        "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role></user>"
+        "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role><empty></empty></user>"
     );
 
     let reconstructed = User::deserialize_str(&xml).unwrap();
