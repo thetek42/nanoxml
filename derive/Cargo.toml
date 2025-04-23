@@ -2,6 +2,12 @@
 name = "nanoxml-derive"
 version = "0.1.0"
 edition = "2024"
+description = "Derive macros for nanoxml"
+license = "MIT"
+documentation = "https://git.tjdev.de/thetek/nanoxml"
+homepage = "https://git.tjdev.de/thetek/nanoxml"
+repository = "https://git.tjdev.de/thetek/nanoxml"
+keywords = ["xml", "serialization", "deserialization", "serde"]
 
 [lib]
 proc-macro = true

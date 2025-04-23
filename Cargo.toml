@@ -2,6 +2,13 @@
 name = "nanoxml"
 version = "0.1.0"
 edition = "2024"
+description = "A truly minimal XML (de)serializer"
+license = "MIT"
+documentation = "https://git.tjdev.de/thetek/nanoxml"
+homepage = "https://git.tjdev.de/thetek/nanoxml"
+repository = "https://git.tjdev.de/thetek/nanoxml"
+readme = "README.md"
+keywords = ["xml", "serialization", "deserialization", "serde"]
 
 [features]
 default = ["alloc", "de", "derive", "ser"]
@@ -13,7 +20,7 @@ heapless = ["dep:heapless"]
 
 [dependencies]
 heapless = { version = "0.8.0", optional = true }
-nanoxml-derive = { path = "./derive", optional = true }
+nanoxml-derive = { path = "./derive", version = "0.1.0", optional = true }
 
 [workspace]
 resolver = "2"
