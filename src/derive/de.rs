@@ -35,6 +35,10 @@ pub trait DeXmlSeq<'a>: Sized + 'a {
     fn push_item(this: &mut Self::Intermediate, parser: &mut XmlParser<'a>)
     -> Result<(), XmlError>;
     fn finish(this: Self::Intermediate) -> Result<Self, XmlError>;
+
+    fn finish_opt(this: Self::Intermediate) -> Result<Option<Self>, XmlError> {
+        Self::finish(this).map(Some)
+    }
 }
 
 pub trait DeXmlTopLevel<'a>: DeXml<'a> {
@@ -178,6 +182,14 @@ impl<'a, T: DeXml<'a>, const N: usize> DeXmlSeq<'a> for [T; N] {
             Err(XmlError::SeqUnderflow)
         }
     }
+
+    fn finish_opt(this: Self::Intermediate) -> Result<Option<Self>, XmlError> {
+        if this.1 == 0 {
+            Ok(None)
+        } else {
+            Self::finish(this).map(Some)
+        }
+    }
 }
 
 impl<'a, T: DeXmlSeq<'a>> DeXmlSeq<'a> for Option<T> {
@@ -195,6 +207,6 @@ impl<'a, T: DeXmlSeq<'a>> DeXmlSeq<'a> for Option<T> {
     }
 
     fn finish(this: Self::Intermediate) -> Result<Self, XmlError> {
-        Ok(Some(T::finish(this)?))
+        T::finish_opt(this)
     }
 }

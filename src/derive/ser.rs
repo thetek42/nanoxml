@@ -156,13 +156,7 @@ impl<T: SerXml> SerXml for Option<T> {
 
     fn ser_xml<W: Write>(&self, xml: &mut XmlBuilder<'_, W>, tag_name: &str) -> FmtResult {
         match self {
-            Some(t) => {
-                xml.tag_open_start(tag_name)?;
-                t.ser_attrs(xml)?;
-                xml.tag_open_end()?;
-                t.ser_body(xml)?;
-                xml.tag_close(tag_name)
-            }
+            Some(t) => t.ser_xml(xml, tag_name),
             None => Ok(()),
         }
     }
