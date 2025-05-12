@@ -403,7 +403,6 @@ fn skip_xml_header(s: &str) -> Result<&str, XmlError> {
     }
 }
 
-#[cfg(feature = "alloc")]
 fn starts_with_xml_escape_code(s: &str) -> Option<(char, usize)> {
     if s.starts_with("lt;") {
         Some(('<', 3))

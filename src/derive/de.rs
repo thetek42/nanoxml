@@ -107,6 +107,7 @@ impl<const N: usize> DeXmlAttr<'_> for heapless::String<N> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<'a, T: DeXml<'a>> DeXmlSeq<'a> for Vec<T> {
     type Intermediate = Self;
 
