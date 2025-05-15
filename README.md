@@ -10,6 +10,7 @@ A truly minimal XML (de)serializer for Rust.
 - no runtime dependencies
 - `no_std`
 - optional `alloc` support
+- optional `defmt` support
 - optional `heapless` support
 - UTF-8 only
 

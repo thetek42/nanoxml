@@ -344,6 +344,7 @@ impl<'a> Iterator for XmlStrIter<'a> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum XmlError {
     UnexpectedChar,
     InvalidIdentifier,
