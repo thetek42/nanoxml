@@ -241,7 +241,7 @@ impl<const N: usize> SerXml for heapless::String<N> {
 #[cfg(feature = "heapless")]
 impl<const N: usize> SerXmlAsAttr for heapless::String<N> {}
 
-impl<'a, T: SerXml + ?Sized> SerXml for &'a T {
+impl<T: SerXml + ?Sized> SerXml for &T {
     fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
         T::ser_attrs(*self, xml)
     }
@@ -251,4 +251,4 @@ impl<'a, T: SerXml + ?Sized> SerXml for &'a T {
     }
 }
 
-impl<'a, T: SerXmlAsAttr + ?Sized> SerXmlAsAttr for &'a T {}
+impl<T: SerXmlAsAttr + ?Sized> SerXmlAsAttr for &T {}

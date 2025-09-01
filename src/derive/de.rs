@@ -119,7 +119,8 @@ impl<'a, T: DeXml<'a>> DeXmlSeq<'a> for Vec<T> {
         this: &mut Self::Intermediate,
         parser: &mut XmlParser<'a>,
     ) -> Result<(), XmlError> {
-        Ok(this.push(T::de_xml(parser)?))
+        this.push(T::de_xml(parser)?);
+        Ok(())
     }
 
     fn finish(this: Self::Intermediate) -> Result<Self, XmlError> {

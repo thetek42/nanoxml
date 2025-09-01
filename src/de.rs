@@ -264,16 +264,16 @@ impl<'a> XmlStr<'a> {
         while i < self.s.len() {
             let s = &self.s[i..];
             let c = s.chars().next().unwrap();
-            if c == '&' {
-                if let Some((c, n)) = starts_with_xml_escape_code(&s[1..]) {
-                    let mut ret = String::from(&self.s[0..i]);
+            if c == '&'
+                && let Some((c, n)) = starts_with_xml_escape_code(&s[1..])
+            {
+                let mut ret = String::from(&self.s[0..i]);
+                ret.push(c);
+                let iter = XmlStrIter::new(&s[(n + 1)..]);
+                for c in iter {
                     ret.push(c);
-                    let iter = XmlStrIter::new(&s[(n + 1)..]);
-                    for c in iter {
-                        ret.push(c);
-                    }
-                    return Cow::Owned(ret);
                 }
+                return Cow::Owned(ret);
             }
             i += c.len_utf8();
         }
