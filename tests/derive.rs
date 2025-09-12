@@ -5,7 +5,7 @@ use std::net::Ipv4Addr;
 
 use nanoxml::de::XmlStr;
 use nanoxml::derive::de::{DeXml, DeXmlTopLevel};
-use nanoxml::derive::ser::{SerXml, SerXmlTopLevel};
+use nanoxml::derive::ser::{RawXml, SerXml, SerXmlTopLevel};
 
 #[derive(Debug, DeXml, PartialEq, SerXml)]
 #[nanoxml(rename = "user")]
@@ -54,6 +54,12 @@ struct Lifetimed<'a> {
     cow: Cow<'a, str>,
 }
 
+#[derive(Debug, PartialEq, SerXml)]
+struct SerOnly {
+    text: String,
+    raw: RawXml,
+}
+
 #[test]
 fn derive() {
     let user = User {
@@ -87,6 +93,16 @@ fn derive() {
     assert_eq!(lifetimed.cow, "bar");
     let xml_reconstructed = lifetimed.serialize_to_string();
     assert_eq!(lifetimed_xml, xml_reconstructed);
+
+    let ser_only = SerOnly {
+        text: String::from("<Foo>Bar&Baz</Foo>"),
+        raw: String::from("<Foo>Bar&Baz</Foo>").into(),
+    };
+    let ser_only_xml = ser_only.serialize_to_string();
+    assert_eq!(
+        ser_only_xml,
+        "<SerOnly><text>&lt;Foo&gt;Bar&amp;Baz&lt;/Foo&gt;</text><raw><Foo>Bar&Baz</Foo></raw></SerOnly>",
+    );
 }
 
 fn fourtytwo() -> i32 {

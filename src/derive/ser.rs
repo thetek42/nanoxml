@@ -252,3 +252,28 @@ impl<T: SerXml + ?Sized> SerXml for &T {
 }
 
 impl<T: SerXmlAsAttr + ?Sized> SerXmlAsAttr for &T {}
+
+#[cfg(feature = "alloc")]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct RawXml(pub String);
+
+#[cfg(feature = "alloc")]
+impl From<String> for RawXml {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl SerXml for RawXml {
+    fn ser_body<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        xml.write_str(&self.0)
+    }
+    fn ser_attrs<W: Write>(&self, xml: &mut XmlBuilder<'_, W>) -> FmtResult {
+        _ = xml;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl SerXmlAsAttr for RawXml {}
