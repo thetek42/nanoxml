@@ -5,7 +5,9 @@ use core::net::IpAddr;
 use core::net::Ipv4Addr;
 use core::net::Ipv6Addr;
 
+#[cfg(feature = "de")]
 use crate::de::XmlStr;
+
 use crate::ser::XmlBuilder;
 
 pub use nanoxml_derive::SerXml;

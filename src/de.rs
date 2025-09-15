@@ -1,5 +1,3 @@
-// TODO: derives
-
 #[cfg(feature = "alloc")]
 extern crate alloc;
 

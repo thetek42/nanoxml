@@ -1,5 +1,3 @@
-// TODO: derives
-
 use core::fmt::Arguments;
 use core::fmt::Result as FmtResult;
 use core::fmt::Write;
