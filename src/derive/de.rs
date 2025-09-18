@@ -23,7 +23,7 @@ pub trait DeXmlAttr<'a>: Sized + 'a {
 impl<'a, T: DeXmlAttr<'a>> DeXml<'a> for T {
     fn de_xml(parser: &mut XmlParser<'a>) -> Result<Self, XmlError> {
         parser.tag_open_end()?;
-        let s = parser.text_and_tag_close("")?;
+        let s = parser.text_and_tag_close()?;
         Self::de_xml_attr(s)
     }
 }

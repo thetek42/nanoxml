@@ -225,7 +225,7 @@ fn derive_dexml_struct(
             let field_name = f.field_name;
             quote! {
                 #field_name = Some(::nanoxml::derive::de::DeXmlAttr::de_xml_attr(__parser.text()?)?);
-                __parser.tag_close("")?;
+                __parser.tag_close()?;
             }
         });
 
@@ -254,7 +254,7 @@ fn derive_dexml_struct(
     let de_body = match de_text {
         Some(de_text) => de_text,
         None => quote! {
-            while let Ok((__tag)) = __parser.tag_open_or_close("")? {
+            while let Ok((__tag)) = __parser.tag_open_or_close()? {
                 match __tag {
                     #(#de_regular)*
                     _ => return Err(::nanoxml::de::XmlError::InvalidField),

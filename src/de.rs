@@ -29,10 +29,17 @@ impl<'a> XmlParser<'a> {
     pub fn next_token(&mut self) -> Result<Option<XmlToken<'a>>, XmlError> {
         if self.selfclose {
             self.selfclose = false;
-            return Ok(Some(XmlToken::TagClose("")));
+            return Ok(Some(XmlToken::TagClose));
         }
 
         self.consume_whitespace();
+        if self.s[self.n..].starts_with("<!--") {
+            let Some(comment_end) = self.s[self.n..].find("-->") else {
+                return Err(XmlError::UnexpectedEof);
+            };
+            self.n += comment_end + 4;
+            self.consume_whitespace();
+        }
         match self.consume_ascii() {
             Some(b'<') => {
                 let close = self.opt_consume_ascii(b'/').is_some();
@@ -40,7 +47,7 @@ impl<'a> XmlParser<'a> {
                 Ok(Some(match close {
                     true => {
                         self.expect_ascii(b'>')?;
-                        XmlToken::TagClose(identifier)
+                        XmlToken::TagClose
                     }
                     false => {
                         self.in_tag = true;
@@ -89,12 +96,9 @@ impl<'a> XmlParser<'a> {
         }
     }
 
-    pub fn tag_close(&mut self, expect: &str) -> Result<(), XmlError> {
+    pub fn tag_close(&mut self) -> Result<(), XmlError> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
-            XmlToken::TagClose(tag) if tag == expect => Ok(()),
-            XmlToken::TagClose("") => Ok(()),
-            XmlToken::TagClose(_) if expect.is_empty() => Ok(()),
-            XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
+            XmlToken::TagClose => Ok(()),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
@@ -121,21 +125,15 @@ impl<'a> XmlParser<'a> {
         }
     }
 
-    pub fn tag_open_or_close(
-        &mut self,
-        expect_close: &str,
-    ) -> Result<Result<&'a str, ()>, XmlError> {
+    pub fn tag_open_or_close(&mut self) -> Result<Result<&'a str, ()>, XmlError> {
         match self.next_token()?.ok_or(XmlError::UnexpectedEof)? {
             XmlToken::TagOpenStart(tag) => Ok(Ok(tag)),
-            XmlToken::TagClose(tag) if tag == expect_close => Ok(Err(())),
-            XmlToken::TagClose("") => Ok(Err(())),
-            XmlToken::TagClose(_) if expect_close.is_empty() => Ok(Err(())),
-            XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
+            XmlToken::TagClose => Ok(Err(())),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
 
-    pub fn text_and_tag_close(&mut self, expect_close: &str) -> Result<XmlStr<'a>, XmlError> {
+    pub fn text_and_tag_close(&mut self) -> Result<XmlStr<'a>, XmlError> {
         let mut token = self.next_token()?.ok_or(XmlError::UnexpectedEof)?;
         let s = match token {
             XmlToken::Text(s) => {
@@ -144,12 +142,8 @@ impl<'a> XmlParser<'a> {
             }
             _ => XmlStr::new(""),
         };
-
         match token {
-            XmlToken::TagClose(tag) if tag == expect_close => Ok(s),
-            XmlToken::TagClose("") => Ok(s),
-            XmlToken::TagClose(_) if expect_close.is_empty() => Ok(s),
-            XmlToken::TagClose(_) => Err(XmlError::NameMismatch),
+            XmlToken::TagClose => Ok(s),
             _ => Err(XmlError::UnexpectedToken),
         }
     }
@@ -237,7 +231,7 @@ impl<'a> XmlParser<'a> {
 pub enum XmlToken<'a> {
     TagOpenStart(&'a str),
     TagOpenEnd,
-    TagClose(&'a str),
+    TagClose,
     Attribute(&'a str, XmlStr<'a>),
     Text(XmlStr<'a>),
 }
