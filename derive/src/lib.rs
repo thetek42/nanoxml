@@ -257,7 +257,7 @@ fn derive_dexml_struct(
             while let Ok((__tag)) = __parser.tag_open_or_close()? {
                 match __tag {
                     #(#de_regular)*
-                    _ => return Err(::nanoxml::de::XmlError::InvalidField),
+                    _ => return Err(::nanoxml::de::XmlError::InvalidField("body".to_owned())),
                 }
             }
         },
@@ -269,7 +269,7 @@ fn derive_dexml_struct(
             let field_name = f.field_name;
             match f.field_type {
                 FieldType::Regular => match &f.default_de {
-                    None => quote! { #field_name: #field_name.ok_or(::nanoxml::de::XmlError::MissingField)?, },
+                    None => quote! { #field_name: #field_name.ok_or(::nanoxml::de::XmlError::MissingField(stringify!(#field_name)))?, },
                     Some(None) => quote! { #field_name: #field_name.unwrap_or_default(), },
                     Some(Some(func)) => {
                         let func = format_ident!("{func}");
@@ -289,7 +289,7 @@ fn derive_dexml_struct(
                 while let Ok((__attr_key, __attr_value)) = __parser.attr_or_tag_open_end()? {
                     match __attr_key {
                         #(#de_attr)*
-                        _ => return Err(::nanoxml::de::XmlError::InvalidField),
+                        _ => return Err(::nanoxml::de::XmlError::InvalidField(__attr_key.to_owned())),
                     }
                 }
                 #de_body
