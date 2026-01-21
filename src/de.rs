@@ -282,7 +282,7 @@ impl<'a> XmlStr<'a> {
     }
 
     #[cfg(feature = "heapless")]
-    pub fn heapless<const N: usize>(&self) -> Result<heapless::String<N>, ()> {
+    pub fn heapless<const N: usize>(&self) -> Result<heapless::String<N>, heapless::CapacityError> {
         let mut ret = heapless::String::new();
         for c in self.iter() {
             ret.push(c)?;
