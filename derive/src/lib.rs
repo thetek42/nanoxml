@@ -289,7 +289,7 @@ fn derive_dexml_struct(
                 while let Ok((__attr_key, __attr_value)) = __parser.attr_or_tag_open_end()? {
                     match __attr_key {
                         #(#de_attr)*
-                        _ => return Err(::nanoxml::de::XmlError::InvalidField(__attr_key.to_owned())),
+                        _ => (),
                     }
                 }
                 #de_body

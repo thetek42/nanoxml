@@ -78,10 +78,18 @@ fn derive() {
         empty: String::new(),
     };
 
-    let xml = user.serialize_to_string();
+    let mut xml = user.serialize_to_string();
     assert_eq!(
         xml,
         "<user name=\"admin\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role><empty></empty></user>"
+    );
+
+    // insert unknown attribute to test that nanoxml ignores them
+    let pos = xml.find("dname").unwrap();
+    xml.insert_str(pos, "unknownattr=\"foobarbaz\" ");
+    assert_eq!(
+        xml,
+        "<user name=\"admin\" unknownattr=\"foobarbaz\" dname=\"Admin\" qux=\"456\"><id>42</id><pass>123456</pass><bar>123</bar><multi>-1</multi><multi>0</multi><multi>1</multi><ip>192.168.0.1</ip><role>admin</role><empty></empty></user>"
     );
 
     let reconstructed = User::deserialize_str(&xml).unwrap();
