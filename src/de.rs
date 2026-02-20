@@ -33,7 +33,7 @@ impl<'a> XmlParser<'a> {
         }
 
         self.consume_whitespace();
-        if self.s[self.n..].starts_with("<!--") {
+        while self.s[self.n..].starts_with("<!--") {
             let Some(comment_end) = self.s[self.n..].find("-->") else {
                 return Err(XmlError::UnexpectedEof);
             };
